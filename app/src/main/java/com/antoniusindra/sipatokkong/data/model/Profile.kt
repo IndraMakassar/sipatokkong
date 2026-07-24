@@ -10,5 +10,10 @@ data class Profile(
     val role: UserRole,
     @SerialName("full_name") val fullName: String,
     val phone: String? = null,
+    @SerialName("family_status") val familyStatus: String? = null,
+    val address: String? = null,
+    @SerialName("quota_notes") val quotaNotes: String? = null,
+    val specialization: String? = null,
+    @SerialName("created_by") val createdBy: String? = null,
     @SerialName("is_active") val isActive: Boolean = true,
 )
