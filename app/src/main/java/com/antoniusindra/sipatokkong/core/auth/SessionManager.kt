@@ -47,17 +47,43 @@ class SessionManager(private val client: SupabaseClient) {
         }
     }
 
+    fun retry() {
+        val status = client.auth.currentSessionOrNull()
+        if (status != null) {
+            scope.launch { loadProfile(status.user?.id) }
+        } else {
+            _state.value = State.SignedOut
+        }
+    }
+
     private suspend fun loadProfile(userId: String?) {
         if (userId == null) {
             _state.value = State.SignedOut
             return
         }
+
+        // DEBUG: Printing the userId to verify against Supabase database
+        println("SessionManager: Loading profile for userId: $userId")
+
         _state.value = runCatching {
             val profile = client.postgrest.from("profiles")
-                .select { filter { eq("id", userId) } }
-                .decodeSingle<Profile>()
-            State.SignedIn(profile)
-        }.getOrElse { State.Error(it.message ?: "Gagal memuat profil") }
+                .select {
+                    filter {
+                        eq("id", userId)
+                    }
+                }
+                .decodeSingleOrNull<Profile>()
+
+            if (profile != null) {
+                State.SignedIn(profile)
+            } else {
+                // If profile is null, it means the row doesn't exist in 'profiles' table
+                State.Error("Profil tidak ditemukan (User ID: $userId). Pastikan data profil sudah dibuat di database.")
+            }
+        }.getOrElse {
+            it.printStackTrace()
+            State.Error(it.message ?: "Gagal memuat profil")
+        }
     }
 
     val currentRole: UserRole?
