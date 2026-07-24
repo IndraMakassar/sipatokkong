@@ -47,6 +47,15 @@ class SessionManager(private val client: SupabaseClient) {
         }
     }
 
+    fun retry() {
+        val status = client.auth.currentSessionOrNull()
+        if (status != null) {
+            scope.launch { loadProfile(status.user?.id) }
+        } else {
+            _state.value = State.SignedOut
+        }
+    }
+
     private suspend fun loadProfile(userId: String?) {
         if (userId == null) {
             _state.value = State.SignedOut
