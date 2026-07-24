@@ -13,6 +13,14 @@ class AuthRepository(private val client: SupabaseClient) {
         }
     }
 
+    suspend fun signUp(email: String, password: String): String {
+        val result = client.auth.signUpWith(Email) {
+            this.email = email
+            this.password = password
+        }
+        return result?.id ?: throw Exception("Gagal mendaftarkan user: ID tidak ditemukan")
+    }
+
     suspend fun signOut() {
         client.auth.signOut()
     }

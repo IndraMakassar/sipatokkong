@@ -27,4 +27,22 @@ object SupabaseModule {
             install(Realtime)
         }
     }
+
+    /**
+     * A secondary client that does NOT persist sessions.
+     * Used for registration flows to avoid logging out the current admin.
+     */
+    val noSessionClient: SupabaseClient by lazy {
+        createSupabaseClient(
+            supabaseUrl = BuildConfig.SUPABASE_URL,
+            supabaseKey = BuildConfig.SUPABASE_ANON_KEY,
+        ) {
+            install(Auth) {
+                autoLoadFromStorage = false
+                alwaysAutoRefresh = false
+                // No session manager means it won't persist
+            }
+            install(Postgrest)
+        }
+    }
 }
