@@ -126,6 +126,7 @@ private val sampleTasks = listOf(
 fun ParentHomeScreen(
     profile: Profile,
     onLogout: () -> Unit,
+    onOpenNotifications: () -> Unit = {},
     childName: String = "Almair",
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -142,7 +143,11 @@ fun ParentHomeScreen(
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
             when (selectedTab) {
-                0 -> BerandaContent(profile = profile, childName = childName)
+                0 -> BerandaContent(
+                    profile = profile,
+                    childName = childName,
+                    onOpenNotifications = onOpenNotifications,
+                )
                 1 -> PlaceholderTab("Riwayat")
                 else -> PlaceholderTab("Profil", onLogout = onLogout)
             }
@@ -151,7 +156,11 @@ fun ParentHomeScreen(
 }
 
 @Composable
-private fun BerandaContent(profile: Profile, childName: String) {
+private fun BerandaContent(
+    profile: Profile,
+    childName: String,
+    onOpenNotifications: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -160,7 +169,7 @@ private fun BerandaContent(profile: Profile, childName: String) {
             .padding(top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        ParentTopBar()
+        ParentTopBar(onBellClick = onOpenNotifications)
 
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text("Selamat pagi,", style = MaterialTheme.typography.bodyMedium, color = MutedText)
@@ -182,7 +191,7 @@ private fun BerandaContent(profile: Profile, childName: String) {
 }
 
 @Composable
-private fun ParentTopBar() {
+private fun ParentTopBar(onBellClick: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -203,7 +212,7 @@ private fun ParentTopBar() {
             color = BrandTeal,
             modifier = Modifier.weight(1f)
         )
-        IconButton(onClick = { /* TODO: buka notifikasi */ }) {
+        IconButton(onClick = onBellClick) {
             Icon(Icons.Filled.Notifications, contentDescription = "Notifikasi", tint = MutedText)
         }
     }

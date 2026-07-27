@@ -29,6 +29,7 @@ import com.antoniusindra.sipatokkong.ui.admin.CreateAccountScreen
 import com.antoniusindra.sipatokkong.ui.auth.login.LoginScreen
 import com.antoniusindra.sipatokkong.ui.home.AdminHomeScreen
 import com.antoniusindra.sipatokkong.ui.home.ParentHomeScreen
+import com.antoniusindra.sipatokkong.ui.notifications.ParentNotificationScreen
 import kotlinx.coroutines.launch
 
 @Composable
@@ -132,9 +133,13 @@ fun SipatokkongMain() {
                                 scope.launch {
                                     sessionManager.signOut()
                                 }
-                            }
+                            },
+                            onOpenNotifications = { navController.navigate("parent_notifications") }
                         )
                     }
+                }
+                composable("parent_notifications") {
+                    ParentNotificationScreen(onBack = { navController.popBackStack() })
                 }
                 composable("create_orangtua") {
                     CreateAccountScreen(
