@@ -29,7 +29,11 @@ import com.antoniusindra.sipatokkong.ui.admin.CreateAccountScreen
 import com.antoniusindra.sipatokkong.ui.auth.login.LoginScreen
 import com.antoniusindra.sipatokkong.ui.home.AdminHomeScreen
 import com.antoniusindra.sipatokkong.ui.home.ParentHomeScreen
+import com.antoniusindra.sipatokkong.ui.home.ParentHomeViewModel
 import com.antoniusindra.sipatokkong.ui.notifications.ParentNotificationScreen
+import com.antoniusindra.sipatokkong.ui.relawan.CreateProgramAjarScreen
+import com.antoniusindra.sipatokkong.ui.tugas.TugasDetailScreen
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 
 @Composable
@@ -127,6 +131,8 @@ fun SipatokkongMain() {
                 composable("orangtua_home") {
                     val signedInState = sessionState as? SessionManager.State.SignedIn
                     if (signedInState != null) {
+                        val parentVm: ParentHomeViewModel = viewModel(factory = ParentHomeViewModel.Factory)
+                        val parentState by parentVm.uiState.collectAsState()
                         ParentHomeScreen(
                             profile = signedInState.profile,
                             onLogout = {
@@ -134,12 +140,21 @@ fun SipatokkongMain() {
                                     sessionManager.signOut()
                                 }
                             },
-                            onOpenNotifications = { navController.navigate("parent_notifications") }
+                            onOpenNotifications = { navController.navigate("parent_notifications") },
+                            onOpenTask = { id -> navController.navigate("tugas_detail/$id") },
+                            tasks = parentState.tasks,
+                            isLoadingTasks = parentState.isLoading,
                         )
                     }
                 }
                 composable("parent_notifications") {
                     ParentNotificationScreen(onBack = { navController.popBackStack() })
+                }
+                composable("tugas_detail/{tugasId}") { backStackEntry ->
+                    val id = backStackEntry.arguments?.getString("tugasId")
+                    if (id != null) {
+                        TugasDetailScreen(tugasId = id, onBack = { navController.popBackStack() })
+                    }
                 }
                 composable("create_orangtua") {
                     CreateAccountScreen(
@@ -160,6 +175,10 @@ fun SipatokkongMain() {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(text = "Welcome, ${signedInState.profile.fullName} (${signedInState.profile.role})")
                                 Spacer(modifier = Modifier.height(16.dp))
+                                Button(onClick = { navController.navigate("create_program_ajar") }) {
+                                    Text("Buat Program Ajar")
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
                                 Button(onClick = {
                                     scope.launch {
                                         sessionManager.signOut()
@@ -170,6 +189,9 @@ fun SipatokkongMain() {
                             }
                         }
                     }
+                }
+                composable("create_program_ajar") {
+                    CreateProgramAjarScreen(onBack = { navController.popBackStack() })
                 }
             }
         }

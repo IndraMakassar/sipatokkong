@@ -3,8 +3,10 @@ package com.antoniusindra.sipatokkong.core.di
 import android.content.Context
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.supabase.SupabaseModule
+import com.antoniusindra.sipatokkong.data.repository.AnakRepository
 import com.antoniusindra.sipatokkong.data.repository.AuthRepository
 import com.antoniusindra.sipatokkong.data.repository.ProfileRepository
+import com.antoniusindra.sipatokkong.data.repository.TugasRepository
 import io.github.jan.supabase.SupabaseClient
 
 /**
@@ -26,6 +28,10 @@ object ServiceLocator {
     val registrationRepository: AuthRepository by lazy { AuthRepository(SupabaseModule.noSessionClient) }
 
     val profileRepository: ProfileRepository by lazy { ProfileRepository(supabase) }
+
+    val anakRepository: AnakRepository by lazy { AnakRepository(supabase) }
+
+    val tugasRepository: TugasRepository by lazy { TugasRepository(supabase) }
 
     fun init(context: Context) {
         appContext = context.applicationContext
