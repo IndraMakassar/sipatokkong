@@ -28,6 +28,7 @@ import com.antoniusindra.sipatokkong.data.model.UserRole
 import com.antoniusindra.sipatokkong.ui.admin.CreateAccountScreen
 import com.antoniusindra.sipatokkong.ui.auth.login.LoginScreen
 import com.antoniusindra.sipatokkong.ui.home.AdminHomeScreen
+import com.antoniusindra.sipatokkong.ui.home.ParentHomeScreen
 import kotlinx.coroutines.launch
 
 @Composable
@@ -46,7 +47,11 @@ fun SipatokkongMain() {
                 }
             }
             is SessionManager.State.SignedIn -> {
-                val destination = if (state.profile.role == UserRole.ADMIN) "admin_home" else "user_home"
+                val destination = when (state.profile.role) {
+                    UserRole.ADMIN -> "admin_home"
+                    UserRole.ORANGTUA -> "orangtua_home"
+                    else -> "user_home"
+                }
                 navController.navigate(destination) {
                     popUpTo(0) { inclusive = true }
                 }
@@ -110,6 +115,19 @@ fun SipatokkongMain() {
                             profile = signedInState.profile,
                             onCreateOrangtua = { navController.navigate("create_orangtua") },
                             onCreateRelawan = { navController.navigate("create_relawan") },
+                            onLogout = {
+                                scope.launch {
+                                    sessionManager.signOut()
+                                }
+                            }
+                        )
+                    }
+                }
+                composable("orangtua_home") {
+                    val signedInState = sessionState as? SessionManager.State.SignedIn
+                    if (signedInState != null) {
+                        ParentHomeScreen(
+                            profile = signedInState.profile,
                             onLogout = {
                                 scope.launch {
                                     sessionManager.signOut()
