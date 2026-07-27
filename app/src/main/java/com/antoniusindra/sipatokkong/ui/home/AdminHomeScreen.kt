@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.Button
@@ -37,6 +38,7 @@ fun AdminHomeScreen(
     profile: Profile,
     onCreateOrangtua: () -> Unit,
     onCreateRelawan: () -> Unit,
+    onCreateAnak: () -> Unit,
     onLogout: () -> Unit
 ) {
     Scaffold(
@@ -92,6 +94,15 @@ fun AdminHomeScreen(
                 description = "Daftarkan relawan baru ke sistem.",
                 icon = Icons.Default.GroupAdd,
                 onClick = onCreateRelawan
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            AdminActionCard(
+                title = "Tambah Data Anak",
+                description = "Daftarkan anak, tautkan ke orang tua & tugaskan relawan.",
+                icon = Icons.Default.ChildCare,
+                onClick = onCreateAnak
             )
         }
     }

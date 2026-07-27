@@ -1,10 +1,20 @@
 package com.antoniusindra.sipatokkong.data.repository
 
 import com.antoniusindra.sipatokkong.data.model.Profile
+import com.antoniusindra.sipatokkong.data.model.ProfileOption
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Columns
 
 class ProfileRepository(private val client: SupabaseClient) {
+
+    /** All profiles of a given role (id + name). Admin can read all per RLS `can_view_profile`. */
+    suspend fun profilesByRole(role: String): List<ProfileOption> =
+        client.postgrest.from("profiles")
+            .select(columns = Columns.list("id", "full_name")) {
+                filter { eq("role", role) }
+            }
+            .decodeList<ProfileOption>()
 
     suspend fun createProfile(profile: Profile) {
         client.postgrest.from("profiles").insert(profile)
