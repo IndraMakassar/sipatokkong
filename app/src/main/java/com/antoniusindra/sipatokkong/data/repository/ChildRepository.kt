@@ -34,6 +34,15 @@ class ChildRepository(private val client: SupabaseClient) {
             .decodeList<InsertedId>()
             .isNotEmpty()
 
+    /** The current parent's child (RLS `anak_select` via `is_parent_of`); first one (soft 1-child rule). */
+    suspend fun childForCurrentParent(): ChildOption? =
+        client.postgrest.from("anak")
+            .select(columns = Columns.list("id", "nama")) {
+                filter { eq("is_active", true) }
+            }
+            .decodeList<ChildOption>()
+            .firstOrNull()
+
     /** Admin-only: create a child row, returns the new id. */
     suspend fun createChild(insert: ChildInsert): String =
         client.postgrest.from("anak")

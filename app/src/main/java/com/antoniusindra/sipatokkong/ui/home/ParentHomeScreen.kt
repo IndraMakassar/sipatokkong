@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.antoniusindra.sipatokkong.data.model.Feedback
 import com.antoniusindra.sipatokkong.data.model.Profile
 import com.antoniusindra.sipatokkong.data.model.Task
 import com.antoniusindra.sipatokkong.data.model.UserRole
@@ -93,7 +94,11 @@ fun ParentHomeScreen(
     onLogout: () -> Unit,
     onOpenNotifications: () -> Unit = {},
     onOpenTask: (String) -> Unit = {},
+    onComposeFeedback: () -> Unit = {},
+    onOpenFeedbackList: () -> Unit = {},
+    onOpenFeedbackThread: (String) -> Unit = {},
     tasks: List<Task> = emptyList(),
+    recentFeedback: List<Feedback> = emptyList(),
     isLoadingTasks: Boolean = false,
     childName: String = "Almair",
 ) {
@@ -115,9 +120,13 @@ fun ParentHomeScreen(
                     profile = profile,
                     childName = childName,
                     tasks = tasks,
+                    recentFeedback = recentFeedback,
                     isLoadingTasks = isLoadingTasks,
                     onOpenNotifications = onOpenNotifications,
                     onOpenTask = onOpenTask,
+                    onComposeFeedback = onComposeFeedback,
+                    onOpenFeedbackList = onOpenFeedbackList,
+                    onOpenFeedbackThread = onOpenFeedbackThread,
                 )
                 1 -> PlaceholderTab("Riwayat")
                 else -> PlaceholderTab("Profil", onLogout = onLogout)
@@ -131,9 +140,13 @@ private fun BerandaContent(
     profile: Profile,
     childName: String,
     tasks: List<Task>,
+    recentFeedback: List<Feedback>,
     isLoadingTasks: Boolean,
     onOpenNotifications: () -> Unit,
     onOpenTask: (String) -> Unit,
+    onComposeFeedback: () -> Unit,
+    onOpenFeedbackList: () -> Unit,
+    onOpenFeedbackThread: (String) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -150,7 +163,7 @@ private fun BerandaContent(
             Text("Halo, ${profile.fullName}!", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         }
 
-        HeroCard(childName = childName)
+        HeroCard(childName = childName, onClick = onComposeFeedback)
 
         SectionHeader()
 
@@ -168,6 +181,13 @@ private fun BerandaContent(
 
             else -> tasks.forEach { task -> TaskCard(task, onClick = { onOpenTask(task.id) }) }
         }
+
+        FeedbackSection(
+            items = recentFeedback,
+            onSeeAll = onOpenFeedbackList,
+            onOpenThread = onOpenFeedbackThread,
+            onCompose = onComposeFeedback,
+        )
 
         TipsCard(childName = childName)
     }
@@ -197,9 +217,9 @@ private fun ParentTopBar(onBellClick: () -> Unit) {
 }
 
 @Composable
-private fun HeroCard(childName: String) {
+private fun HeroCard(childName: String, onClick: () -> Unit) {
     Card(
-        onClick = { /* TODO: buka form catatan kondisi anak */ },
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = HeroTeal)
@@ -304,6 +324,85 @@ private fun StatusChip(label: String, bg: Color, textColor: Color) {
         modifier = Modifier.background(bg, CircleShape).padding(horizontal = 14.dp, vertical = 6.dp)
     ) {
         Text(label, color = textColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+private fun feedbackStatusStyle(status: String): StatusStyle = when (status) {
+    "answered" -> StatusStyle("Dijawab", ChipDoneBg, ChipDoneText)
+    "in_process" -> StatusStyle("Diproses", ChipRunningBg, ChipRunningText)
+    else -> StatusStyle("Menunggu", ChipWaitingBg, ChipWaitingText) // open
+}
+
+@Composable
+private fun FeedbackSection(
+    items: List<Feedback>,
+    onSeeAll: () -> Unit,
+    onOpenThread: (String) -> Unit,
+    onCompose: () -> Unit,
+) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "Catatan & Feedback",
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            "Lihat Semua",
+            color = BrandTeal,
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.clickable { onSeeAll() }
+        )
+    }
+
+    if (items.isEmpty()) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Belum ada catatan untuk anak Anda.", color = MutedText, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Tulis Catatan",
+                    color = BrandTeal,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clickable { onCompose() }
+                )
+            }
+        }
+    } else {
+        items.forEach { fb -> FeedbackRow(fb, onClick = { onOpenThread(fb.id) }) }
+    }
+}
+
+@Composable
+private fun FeedbackRow(fb: Feedback, onClick: () -> Unit) {
+    val style = feedbackStatusStyle(fb.status)
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    fb.isi,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                StatusChip(style.label, style.bg, style.text)
+            }
+            fb.createdAt?.let {
+                Text(it.take(10), style = MaterialTheme.typography.labelMedium, color = MutedText)
+            }
+        }
     }
 }
 

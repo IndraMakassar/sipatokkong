@@ -31,6 +31,9 @@ import com.antoniusindra.sipatokkong.ui.auth.login.LoginScreen
 import com.antoniusindra.sipatokkong.ui.home.AdminHomeScreen
 import com.antoniusindra.sipatokkong.ui.home.ParentHomeScreen
 import com.antoniusindra.sipatokkong.ui.home.ParentHomeViewModel
+import com.antoniusindra.sipatokkong.ui.feedback.CreateFeedbackScreen
+import com.antoniusindra.sipatokkong.ui.feedback.FeedbackListScreen
+import com.antoniusindra.sipatokkong.ui.feedback.FeedbackThreadScreen
 import com.antoniusindra.sipatokkong.ui.notifications.ParentNotificationScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.CreateTaskScreen
 import com.antoniusindra.sipatokkong.ui.task.TaskDetailScreen
@@ -144,7 +147,11 @@ fun SipatokkongMain() {
                             },
                             onOpenNotifications = { navController.navigate("parent_notifications") },
                             onOpenTask = { id -> navController.navigate("tugas_detail/$id") },
+                            onComposeFeedback = { navController.navigate("create_feedback") },
+                            onOpenFeedbackList = { navController.navigate("parent_feedback_list") },
+                            onOpenFeedbackThread = { id -> navController.navigate("feedback_thread/$id") },
                             tasks = parentState.tasks,
+                            recentFeedback = parentState.recentFeedback,
                             isLoadingTasks = parentState.isLoading,
                         )
                     }
@@ -173,6 +180,30 @@ fun SipatokkongMain() {
                 composable("create_anak") {
                     CreateChildScreen(onBack = { navController.popBackStack() })
                 }
+                composable("parent_feedback_list") {
+                    FeedbackListScreen(
+                        title = "Catatan & Feedback",
+                        onBack = { navController.popBackStack() },
+                        onOpenThread = { id -> navController.navigate("feedback_thread/$id") },
+                        onCompose = { navController.navigate("create_feedback") },
+                    )
+                }
+                composable("volunteer_feedback_list") {
+                    FeedbackListScreen(
+                        title = "Feedback Orang Tua",
+                        onBack = { navController.popBackStack() },
+                        onOpenThread = { id -> navController.navigate("feedback_thread/$id") },
+                    )
+                }
+                composable("create_feedback") {
+                    CreateFeedbackScreen(onBack = { navController.popBackStack() })
+                }
+                composable("feedback_thread/{feedbackId}") { backStackEntry ->
+                    val id = backStackEntry.arguments?.getString("feedbackId")
+                    if (id != null) {
+                        FeedbackThreadScreen(feedbackId = id, onBack = { navController.popBackStack() })
+                    }
+                }
                 composable("user_home") {
                     val signedInState = sessionState as? SessionManager.State.SignedIn
                     if (signedInState != null) {
@@ -182,6 +213,10 @@ fun SipatokkongMain() {
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Button(onClick = { navController.navigate("create_program_ajar") }) {
                                     Text("Buat Program Ajar")
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(onClick = { navController.navigate("volunteer_feedback_list") }) {
+                                    Text("Feedback Orang Tua")
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Button(onClick = {
