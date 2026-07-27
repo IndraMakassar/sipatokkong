@@ -1,4 +1,4 @@
-package com.antoniusindra.sipatokkong.ui.relawan
+package com.antoniusindra.sipatokkong.ui.volunteer
 
 import android.net.Uri
 import androidx.lifecycle.ViewModel
@@ -8,12 +8,12 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
-import com.antoniusindra.sipatokkong.data.model.AnakOption
+import com.antoniusindra.sipatokkong.data.model.ChildOption
 import com.antoniusindra.sipatokkong.data.model.MediaKind
 import com.antoniusindra.sipatokkong.data.model.TaskPriority
-import com.antoniusindra.sipatokkong.data.model.TugasInsert
-import com.antoniusindra.sipatokkong.data.repository.AnakRepository
-import com.antoniusindra.sipatokkong.data.repository.TugasRepository
+import com.antoniusindra.sipatokkong.data.model.TaskInsert
+import com.antoniusindra.sipatokkong.data.repository.ChildRepository
+import com.antoniusindra.sipatokkong.data.repository.TaskRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,8 +26,8 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 
-data class CreateProgramAjarUiState(
-    val children: List<AnakOption> = emptyList(),
+data class CreateTaskUiState(
+    val children: List<ChildOption> = emptyList(),
     val isLoadingChildren: Boolean = true,
     val selectedAnakId: String? = null,
     val judul: String = "",
@@ -45,14 +45,14 @@ data class CreateProgramAjarUiState(
         get() = children.firstOrNull { it.id == selectedAnakId }?.nama
 }
 
-class CreateProgramAjarViewModel(
-    private val anakRepository: AnakRepository,
-    private val tugasRepository: TugasRepository,
+class CreateTaskViewModel(
+    private val childRepository: ChildRepository,
+    private val taskRepository: TaskRepository,
     private val sessionManager: SessionManager,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(CreateProgramAjarUiState())
-    val uiState: StateFlow<CreateProgramAjarUiState> = _uiState.asStateFlow()
+    private val _uiState = MutableStateFlow(CreateTaskUiState())
+    val uiState: StateFlow<CreateTaskUiState> = _uiState.asStateFlow()
 
     // Store extension separately so the upload names the file correctly.
     private var mediaExt: String? = null
@@ -64,7 +64,7 @@ class CreateProgramAjarViewModel(
     private fun loadChildren() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingChildren = true, error = null) }
-            runCatching { anakRepository.childrenForCurrentRelawan() }
+            runCatching { childRepository.childrenForCurrentVolunteer() }
                 .onSuccess { list ->
                     _uiState.update {
                         it.copy(
@@ -134,10 +134,10 @@ class CreateProgramAjarViewModel(
                         ?.use { it.readBytes() }
                 } ?: throw IllegalStateException("Gagal membaca file media.")
 
-                val path = tugasRepository.uploadDemo(s.selectedAnakId!!, bytes, mediaExt!!)
+                val path = taskRepository.uploadDemo(s.selectedAnakId!!, bytes, mediaExt!!)
 
-                tugasRepository.create(
-                    TugasInsert(
+                taskRepository.create(
+                    TaskInsert(
                         anakId = s.selectedAnakId,
                         relawanId = relawanId!!,
                         judul = s.judul.trim(),
@@ -163,9 +163,9 @@ class CreateProgramAjarViewModel(
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                CreateProgramAjarViewModel(
-                    anakRepository = ServiceLocator.anakRepository,
-                    tugasRepository = ServiceLocator.tugasRepository,
+                CreateTaskViewModel(
+                    childRepository = ServiceLocator.childRepository,
+                    taskRepository = ServiceLocator.taskRepository,
                     sessionManager = ServiceLocator.sessionManager,
                 )
             }

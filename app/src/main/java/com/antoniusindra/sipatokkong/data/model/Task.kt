@@ -21,7 +21,7 @@ enum class MediaKind(val dbValue: String) {
  * `media_path` is required by both the schema (NOT NULL) and the RLS insert policy.
  */
 @Serializable
-data class TugasInsert(
+data class TaskInsert(
     @SerialName("anak_id") val anakId: String,
     @SerialName("relawan_id") val relawanId: String,
     val judul: String,
@@ -35,7 +35,7 @@ data class TugasInsert(
 
 /** A row of `public.tugas` (read model). */
 @Serializable
-data class Tugas(
+data class Task(
     val id: String,
     @SerialName("anak_id") val anakId: String,
     @SerialName("relawan_id") val relawanId: String,

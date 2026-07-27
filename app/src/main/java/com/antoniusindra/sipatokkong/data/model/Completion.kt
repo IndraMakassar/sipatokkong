@@ -12,7 +12,7 @@ enum class ChildResponse(val label: String, val emoji: String) {
 
 /** Insert payload for `public.dokumentasi` (parent's proof that the child did the task). */
 @Serializable
-data class DokumentasiInsert(
+data class DocumentationInsert(
     @SerialName("anak_id") val anakId: String,
     @SerialName("orangtua_id") val orangtuaId: String,
     @SerialName("tugas_id") val tugasId: String? = null,
@@ -27,7 +27,7 @@ data class InsertedId(val id: String)
 
 /** Insert payload for `public.tugas_penyelesaian` (marks a task done; a DB trigger sets status='done'). */
 @Serializable
-data class TugasPenyelesaianInsert(
+data class TaskCompletionInsert(
     @SerialName("tugas_id") val tugasId: String,
     @SerialName("orangtua_id") val orangtuaId: String,
     @SerialName("dokumentasi_id") val dokumentasiId: String? = null,

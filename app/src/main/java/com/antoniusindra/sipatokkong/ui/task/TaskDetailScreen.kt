@@ -1,4 +1,4 @@
-package com.antoniusindra.sipatokkong.ui.tugas
+package com.antoniusindra.sipatokkong.ui.task
 
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -60,10 +60,10 @@ private val MutedText = Color(0xFF6B7280)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TugasDetailScreen(
+fun TaskDetailScreen(
     tugasId: String,
     onBack: () -> Unit,
-    viewModel: TugasDetailViewModel = viewModel(factory = TugasDetailViewModel.Factory),
+    viewModel: TaskDetailViewModel = viewModel(factory = TaskDetailViewModel.Factory),
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -135,7 +135,7 @@ fun TugasDetailScreen(
 @Composable
 private fun DetailBody(
     modifier: Modifier,
-    ui: TugasDetailUiState,
+    ui: TaskDetailUiState,
     onResponse: (ChildResponse) -> Unit,
     onCatatan: (String) -> Unit,
 ) {

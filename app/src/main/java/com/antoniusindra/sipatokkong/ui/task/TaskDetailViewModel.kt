@@ -1,4 +1,4 @@
-package com.antoniusindra.sipatokkong.ui.tugas
+package com.antoniusindra.sipatokkong.ui.task
 
 import android.net.Uri
 import androidx.lifecycle.ViewModel
@@ -9,11 +9,11 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
 import com.antoniusindra.sipatokkong.data.model.ChildResponse
-import com.antoniusindra.sipatokkong.data.model.DokumentasiInsert
+import com.antoniusindra.sipatokkong.data.model.DocumentationInsert
 import com.antoniusindra.sipatokkong.data.model.MediaKind
-import com.antoniusindra.sipatokkong.data.model.Tugas
-import com.antoniusindra.sipatokkong.data.model.TugasPenyelesaianInsert
-import com.antoniusindra.sipatokkong.data.repository.TugasRepository
+import com.antoniusindra.sipatokkong.data.model.Task
+import com.antoniusindra.sipatokkong.data.model.TaskCompletionInsert
+import com.antoniusindra.sipatokkong.data.repository.TaskRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,9 +22,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-data class TugasDetailUiState(
+data class TaskDetailUiState(
     val isLoading: Boolean = true,
-    val tugas: Tugas? = null,
+    val tugas: Task? = null,
     val mediaUrl: String? = null,
     val loadError: String? = null,
     // completion form
@@ -39,13 +39,13 @@ data class TugasDetailUiState(
     val alreadyDone: Boolean get() = tugas?.status == "done"
 }
 
-class TugasDetailViewModel(
-    private val tugasRepository: TugasRepository,
+class TaskDetailViewModel(
+    private val taskRepository: TaskRepository,
     private val sessionManager: SessionManager,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(TugasDetailUiState())
-    val uiState: StateFlow<TugasDetailUiState> = _uiState.asStateFlow()
+    private val _uiState = MutableStateFlow(TaskDetailUiState())
+    val uiState: StateFlow<TaskDetailUiState> = _uiState.asStateFlow()
 
     private var proofExt: String? = null
     private var loaded = false
@@ -56,8 +56,8 @@ class TugasDetailViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, loadError = null) }
             runCatching {
-                val tugas = tugasRepository.getTugas(id) ?: error("Tugas tidak ditemukan.")
-                val url = runCatching { tugasRepository.signedDemoUrl(tugas.mediaPath) }.getOrNull()
+                val tugas = taskRepository.getTask(id) ?: error("Tugas tidak ditemukan.")
+                val url = runCatching { taskRepository.signedDemoUrl(tugas.mediaPath) }.getOrNull()
                 tugas to url
             }.onSuccess { (tugas, url) ->
                 _uiState.update { it.copy(isLoading = false, tugas = tugas, mediaUrl = url) }
@@ -115,10 +115,10 @@ class TugasDetailViewModel(
                         ?.use { it.readBytes() }
                 } ?: throw IllegalStateException("Gagal membaca file bukti.")
 
-                val path = tugasRepository.uploadDokumentasi(tugas.anakId, bytes, proofExt!!)
+                val path = taskRepository.uploadDocumentation(tugas.anakId, bytes, proofExt!!)
 
-                val dokumentasiId = tugasRepository.createDokumentasi(
-                    DokumentasiInsert(
+                val dokumentasiId = taskRepository.createDocumentation(
+                    DocumentationInsert(
                         anakId = tugas.anakId,
                         orangtuaId = orangtuaId,
                         tugasId = tugas.id,
@@ -128,8 +128,8 @@ class TugasDetailViewModel(
                     )
                 )
 
-                tugasRepository.completeTugas(
-                    TugasPenyelesaianInsert(
+                taskRepository.completeTask(
+                    TaskCompletionInsert(
                         tugasId = tugas.id,
                         orangtuaId = orangtuaId,
                         dokumentasiId = dokumentasiId,
@@ -146,8 +146,8 @@ class TugasDetailViewModel(
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                TugasDetailViewModel(
-                    tugasRepository = ServiceLocator.tugasRepository,
+                TaskDetailViewModel(
+                    taskRepository = ServiceLocator.taskRepository,
                     sessionManager = ServiceLocator.sessionManager,
                 )
             }

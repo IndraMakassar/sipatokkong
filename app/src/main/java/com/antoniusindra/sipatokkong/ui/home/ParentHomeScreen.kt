@@ -49,7 +49,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.antoniusindra.sipatokkong.data.model.Profile
-import com.antoniusindra.sipatokkong.data.model.Tugas
+import com.antoniusindra.sipatokkong.data.model.Task
 import com.antoniusindra.sipatokkong.data.model.UserRole
 import com.antoniusindra.sipatokkong.ui.theme.SipatokkongTheme
 
@@ -93,7 +93,7 @@ fun ParentHomeScreen(
     onLogout: () -> Unit,
     onOpenNotifications: () -> Unit = {},
     onOpenTask: (String) -> Unit = {},
-    tasks: List<Tugas> = emptyList(),
+    tasks: List<Task> = emptyList(),
     isLoadingTasks: Boolean = false,
     childName: String = "Almair",
 ) {
@@ -130,7 +130,7 @@ fun ParentHomeScreen(
 private fun BerandaContent(
     profile: Profile,
     childName: String,
-    tasks: List<Tugas>,
+    tasks: List<Task>,
     isLoadingTasks: Boolean,
     onOpenNotifications: () -> Unit,
     onOpenTask: (String) -> Unit,
@@ -253,7 +253,7 @@ private fun SectionHeader() {
 }
 
 @Composable
-private fun TaskCard(task: Tugas, onClick: () -> Unit) {
+private fun TaskCard(task: Task, onClick: () -> Unit) {
     val style = statusStyle(task.status)
     Card(
         onClick = onClick,
@@ -387,13 +387,13 @@ private fun ParentHomeScreenPreview() {
             profile = Profile(id = "preview", role = UserRole.ORANGTUA, fullName = "Ibu Almair"),
             onLogout = {},
             tasks = listOf(
-                Tugas(
+                Task(
                     id = "1", anakId = "a", relawanId = "r", judul = "Latihan Sensori",
                     instruksi = "Ajak anak menyentuh tekstur kain selama 2 menit.",
                     mediaKind = "image", mediaPath = "x", priorityLevel = "medium",
                     deadline = "2026-08-01", status = "assigned",
                 ),
-                Tugas(
+                Task(
                     id = "2", anakId = "a", relawanId = "r", judul = "Latihan Bicara",
                     instruksi = "Latihan pengucapan vokal dasar.",
                     mediaKind = "video", mediaPath = "y", priorityLevel = "high",

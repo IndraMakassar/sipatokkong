@@ -1,10 +1,10 @@
 package com.antoniusindra.sipatokkong.data.repository
 
-import com.antoniusindra.sipatokkong.data.model.DokumentasiInsert
+import com.antoniusindra.sipatokkong.data.model.DocumentationInsert
 import com.antoniusindra.sipatokkong.data.model.InsertedId
-import com.antoniusindra.sipatokkong.data.model.Tugas
-import com.antoniusindra.sipatokkong.data.model.TugasInsert
-import com.antoniusindra.sipatokkong.data.model.TugasPenyelesaianInsert
+import com.antoniusindra.sipatokkong.data.model.Task
+import com.antoniusindra.sipatokkong.data.model.TaskInsert
+import com.antoniusindra.sipatokkong.data.model.TaskCompletionInsert
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
@@ -14,7 +14,7 @@ import java.time.LocalDate
 import java.util.UUID
 import kotlin.time.Duration.Companion.hours
 
-class TugasRepository(private val client: SupabaseClient) {
+class TaskRepository(private val client: SupabaseClient) {
 
     // ---- Relawan: create a tugas (with demo media) ----
 
@@ -25,19 +25,19 @@ class TugasRepository(private val client: SupabaseClient) {
     suspend fun uploadDemo(anakId: String, bytes: ByteArray, ext: String): String =
         uploadTo("tugas-demo", anakId, bytes, ext)
 
-    suspend fun create(insert: TugasInsert) {
+    suspend fun create(insert: TaskInsert) {
         client.postgrest.from("tugas").insert(insert)
     }
 
     // ---- Orang tua: read tasks + complete them ----
 
     /** Tasks visible to the current user. RLS scopes this to the parent's child(ren). */
-    suspend fun tasksForCurrentUser(): List<Tugas> =
+    suspend fun tasksForCurrentUser(): List<Task> =
         client.postgrest.from("tugas")
             .select { order("created_at", Order.DESCENDING) }
             .decodeList()
 
-    suspend fun getTugas(id: String): Tugas? =
+    suspend fun getTask(id: String): Task? =
         client.postgrest.from("tugas")
             .select { filter { eq("id", id) } }
             .decodeSingleOrNull()
@@ -47,18 +47,18 @@ class TugasRepository(private val client: SupabaseClient) {
         client.storage.from("tugas-demo").createSignedUrl(path, 1.hours)
 
     /** Uploads the parent's proof media to the private `dokumentasi` bucket; returns the path. */
-    suspend fun uploadDokumentasi(anakId: String, bytes: ByteArray, ext: String): String =
+    suspend fun uploadDocumentation(anakId: String, bytes: ByteArray, ext: String): String =
         uploadTo("dokumentasi", anakId, bytes, ext)
 
     /** Inserts a `dokumentasi` row and returns its id. */
-    suspend fun createDokumentasi(insert: DokumentasiInsert): String =
+    suspend fun createDocumentation(insert: DocumentationInsert): String =
         client.postgrest.from("dokumentasi")
             .insert(insert) { select(Columns.list("id")) }
             .decodeSingle<InsertedId>()
             .id
 
     /** Marks a task done by inserting into `tugas_penyelesaian` (trigger flips tugas.status). */
-    suspend fun completeTugas(insert: TugasPenyelesaianInsert) {
+    suspend fun completeTask(insert: TaskCompletionInsert) {
         client.postgrest.from("tugas_penyelesaian").insert(insert)
     }
 
