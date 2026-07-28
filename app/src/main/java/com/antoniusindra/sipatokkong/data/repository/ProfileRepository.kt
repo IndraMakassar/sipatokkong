@@ -29,4 +29,12 @@ class ProfileRepository(private val client: SupabaseClient) {
             }
             .decodeSingleOrNull<Profile>()
     }
+
+    suspend fun updateProfile(profile: Profile) {
+        client.postgrest.from("profiles").update(profile) {
+            filter {
+                eq("id", profile.id)
+            }
+        }
+    }
 }

@@ -129,7 +129,7 @@ fun ParentHomeScreen(
                     onOpenFeedbackThread = onOpenFeedbackThread,
                 )
                 1 -> PlaceholderTab("Riwayat")
-                else -> PlaceholderTab("Profil", onLogout = onLogout)
+                else -> ParentProfileScreen(profile = profile, onLogout = onLogout)
             }
         }
     }
