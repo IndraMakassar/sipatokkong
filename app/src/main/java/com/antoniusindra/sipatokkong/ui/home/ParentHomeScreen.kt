@@ -138,11 +138,8 @@ fun ParentHomeScreen(
                     onOpenNotifications = onOpenNotifications,
                     onOpenTask = onOpenTask,
                 )
-                1 -> RiwayatContent(
-                    tasks = tasks.filter { it.status == "done" },
-                    onOpenTask = onOpenTask,
-                )
-                else -> PlaceholderTab("Profil", onLogout = onLogout)
+                1 -> PlaceholderTab("Riwayat")
+                else -> ParentProfileScreen(profile = profile, onLogout = onLogout)
             }
         }
     }
