@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -18,18 +19,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -43,12 +46,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.antoniusindra.sipatokkong.data.model.Feedback
 import com.antoniusindra.sipatokkong.data.model.Profile
 import com.antoniusindra.sipatokkong.data.model.Task
 import com.antoniusindra.sipatokkong.data.model.UserRole
@@ -60,7 +65,8 @@ import com.antoniusindra.sipatokkong.ui.theme.SipatokkongTheme
 // ---------------------------------------------------------------------------
 private val ScreenBg = Color(0xFFF6F7F9)
 private val BrandTeal = Color(0xFF2E6E7E)
-private val HeroTeal = Color(0xFF2F6C7C)
+private val ProgressGradTop = Color(0xFF357C8D)
+private val ProgressGradBottom = Color(0xFF24596A)
 private val IconBoxBg = Color(0xFFCDE7E0)
 private val IconTint = Color(0xFF2E6E7E)
 
@@ -94,11 +100,8 @@ fun ParentHomeScreen(
     onLogout: () -> Unit,
     onOpenNotifications: () -> Unit = {},
     onOpenTask: (String) -> Unit = {},
-    onComposeFeedback: () -> Unit = {},
     onOpenFeedbackList: () -> Unit = {},
-    onOpenFeedbackThread: (String) -> Unit = {},
     tasks: List<Task> = emptyList(),
-    recentFeedback: List<Feedback> = emptyList(),
     isLoadingTasks: Boolean = false,
     childName: String = "Almair",
 ) {
@@ -106,6 +109,17 @@ fun ParentHomeScreen(
 
     Scaffold(
         containerColor = ScreenBg,
+        floatingActionButton = {
+            if (selectedTab == 0) {
+                FloatingActionButton(
+                    onClick = onOpenFeedbackList,
+                    containerColor = BrandTeal,
+                    contentColor = Color.White,
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Catatan & Feedback")
+                }
+            }
+        },
         bottomBar = {
             NavigationBar(containerColor = Color.White) {
                 ParentNavItem(selectedTab == 0, Icons.Filled.Home, "Beranda") { selectedTab = 0 }
@@ -120,13 +134,9 @@ fun ParentHomeScreen(
                     profile = profile,
                     childName = childName,
                     tasks = tasks,
-                    recentFeedback = recentFeedback,
                     isLoadingTasks = isLoadingTasks,
                     onOpenNotifications = onOpenNotifications,
                     onOpenTask = onOpenTask,
-                    onComposeFeedback = onComposeFeedback,
-                    onOpenFeedbackList = onOpenFeedbackList,
-                    onOpenFeedbackThread = onOpenFeedbackThread,
                 )
                 1 -> PlaceholderTab("Riwayat")
                 else -> ParentProfileScreen(profile = profile, onLogout = onLogout)
@@ -140,13 +150,9 @@ private fun BerandaContent(
     profile: Profile,
     childName: String,
     tasks: List<Task>,
-    recentFeedback: List<Feedback>,
     isLoadingTasks: Boolean,
     onOpenNotifications: () -> Unit,
     onOpenTask: (String) -> Unit,
-    onComposeFeedback: () -> Unit,
-    onOpenFeedbackList: () -> Unit,
-    onOpenFeedbackThread: (String) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -163,31 +169,25 @@ private fun BerandaContent(
             Text("Halo, ${profile.fullName}!", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         }
 
-        HeroCard(childName = childName, onClick = onComposeFeedback)
+        WeeklyProgressCard(childName = childName, tasks = tasks)
 
         SectionHeader()
 
+        val activeTasks = tasks.filter { it.status != "done" }
         when {
             isLoadingTasks -> Box(
                 Modifier.fillMaxWidth().padding(24.dp),
                 contentAlignment = Alignment.Center
             ) { CircularProgressIndicator() }
 
-            tasks.isEmpty() -> Text(
+            activeTasks.isEmpty() -> Text(
                 "Belum ada tugas terapi minggu ini.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MutedText,
             )
 
-            else -> tasks.forEach { task -> TaskCard(task, onClick = { onOpenTask(task.id) }) }
+            else -> activeTasks.forEach { task -> TaskCard(task, onClick = { onOpenTask(task.id) }) }
         }
-
-        FeedbackSection(
-            items = recentFeedback,
-            onSeeAll = onOpenFeedbackList,
-            onOpenThread = onOpenFeedbackThread,
-            onCompose = onComposeFeedback,
-        )
 
         TipsCard(childName = childName)
     }
@@ -217,37 +217,67 @@ private fun ParentTopBar(onBellClick: () -> Unit) {
 }
 
 @Composable
-private fun HeroCard(childName: String, onClick: () -> Unit) {
+private fun WeeklyProgressCard(childName: String, tasks: List<Task>) {
+    val done = tasks.count { it.status == "done" }
+    val total = tasks.size
+    val active = total - done
+
     Card(
-        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = HeroTeal)
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
     ) {
-        Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .drawWithCache {
+                    val gradient = Brush.linearGradient(listOf(ProgressGradTop, ProgressGradBottom))
+                    onDrawBehind {
+                        drawRect(gradient)
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.10f),
+                            radius = size.minDimension * 0.55f,
+                            center = Offset(size.width * 0.92f, -size.height * 0.15f),
+                        )
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.06f),
+                            radius = size.minDimension * 0.40f,
+                            center = Offset(size.width * 0.12f, size.height * 1.15f),
+                        )
+                    }
+                }
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("Progres Minggu Ini", color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodyMedium)
+            Text(childName, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+
+            if (total == 0) {
                 Text(
-                    "Catat Kondisi $childName Hari Ini",
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    "Bagaimana perasaan dan perkembangan si kecil hari ini?",
+                    "Belum ada tugas minggu ini.",
                     color = Color.White.copy(alpha = 0.85f),
                     style = MaterialTheme.typography.bodyMedium,
                 )
-            }
-            Spacer(Modifier.width(12.dp))
-            Box(
-                modifier = Modifier.size(48.dp).background(Color.White.copy(alpha = 0.18f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Filled.SentimentSatisfiedAlt,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(28.dp)
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    LinearProgressIndicator(
+                        progress = { done.toFloat() / total },
+                        modifier = Modifier.weight(1f).height(10.dp),
+                        color = Color.White,
+                        trackColor = Color.White.copy(alpha = 0.3f),
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        "$done/$total selesai",
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Text(
+                    if (active > 0) "$active tugas masih perlu dikerjakan" else "Semua tugas sudah selesai 🎉",
+                    color = Color.White.copy(alpha = 0.85f),
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
         }
@@ -327,85 +357,6 @@ private fun StatusChip(label: String, bg: Color, textColor: Color) {
     }
 }
 
-private fun feedbackStatusStyle(status: String): StatusStyle = when (status) {
-    "answered" -> StatusStyle("Dijawab", ChipDoneBg, ChipDoneText)
-    "in_process" -> StatusStyle("Diproses", ChipRunningBg, ChipRunningText)
-    else -> StatusStyle("Menunggu", ChipWaitingBg, ChipWaitingText) // open
-}
-
-@Composable
-private fun FeedbackSection(
-    items: List<Feedback>,
-    onSeeAll: () -> Unit,
-    onOpenThread: (String) -> Unit,
-    onCompose: () -> Unit,
-) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            "Catatan & Feedback",
-            fontSize = 17.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.weight(1f)
-        )
-        Text(
-            "Lihat Semua",
-            color = BrandTeal,
-            fontWeight = FontWeight.SemiBold,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.clickable { onSeeAll() }
-        )
-    }
-
-    if (items.isEmpty()) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        ) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Belum ada catatan untuk anak Anda.", color = MutedText, style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "Tulis Catatan",
-                    color = BrandTeal,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clickable { onCompose() }
-                )
-            }
-        }
-    } else {
-        items.forEach { fb -> FeedbackRow(fb, onClick = { onOpenThread(fb.id) }) }
-    }
-}
-
-@Composable
-private fun FeedbackRow(fb: Feedback, onClick: () -> Unit) {
-    val style = feedbackStatusStyle(fb.status)
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    fb.isi,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(8.dp))
-                StatusChip(style.label, style.bg, style.text)
-            }
-            fb.createdAt?.let {
-                Text(it.take(10), style = MaterialTheme.typography.labelMedium, color = MutedText)
-            }
-        }
-    }
-}
-
 @Composable
 private fun TipsCard(childName: String) {
     Card(
@@ -424,6 +375,40 @@ private fun TipsCard(childName: String) {
                     color = MutedText,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun RiwayatContent(tasks: List<Task>, onOpenTask: (String) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp)
+            .padding(top = 16.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text("Riwayat Tugas Selesai", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+
+        if (tasks.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Filled.History,
+                        contentDescription = null,
+                        tint = MutedText,
+                        modifier = Modifier.size(40.dp),
+                    )
+                    Spacer(Modifier.size(12.dp))
+                    Text("Belum ada tugas yang selesai.", color = MutedText)
+                }
+            }
+        } else {
+            tasks.forEach { task -> TaskCard(task, onClick = { onOpenTask(task.id) }) }
         }
     }
 }

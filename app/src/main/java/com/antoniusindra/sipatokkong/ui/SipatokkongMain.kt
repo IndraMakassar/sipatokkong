@@ -147,12 +147,10 @@ fun SipatokkongMain() {
                             },
                             onOpenNotifications = { navController.navigate("parent_notifications") },
                             onOpenTask = { id -> navController.navigate("tugas_detail/$id") },
-                            onComposeFeedback = { navController.navigate("create_feedback") },
                             onOpenFeedbackList = { navController.navigate("parent_feedback_list") },
-                            onOpenFeedbackThread = { id -> navController.navigate("feedback_thread/$id") },
                             tasks = parentState.tasks,
-                            recentFeedback = parentState.recentFeedback,
                             isLoadingTasks = parentState.isLoading,
+                            childName = parentState.childName ?: "anak Anda",
                         )
                     }
                 }
