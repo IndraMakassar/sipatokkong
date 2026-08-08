@@ -53,10 +53,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.antoniusindra.sipatokkong.data.model.ChildResponse
 import com.antoniusindra.sipatokkong.data.model.MediaKind
+import com.antoniusindra.sipatokkong.ui.components.RichTextDisplay
+import com.antoniusindra.sipatokkong.ui.theme.MutedText
 
 private val ScreenBg = Color(0xFFF6F7F9)
 private val BrandTeal = Color(0xFF2E6E7E)
-private val MutedText = Color(0xFF6B7280)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -158,7 +159,7 @@ private fun DetailBody(
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(tugas.judul, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Text("Instruksi", fontWeight = FontWeight.SemiBold, color = MutedText)
-                Text(tugas.instruksi ?: "-", style = MaterialTheme.typography.bodyLarge)
+                RichTextDisplay(tugas.instruksi ?: "-")
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "⏱ Prioritas ${priorityLabel(tugas.priorityLevel)}" +
@@ -218,7 +219,7 @@ private fun DetailBody(
             }
 
             if (ui.submitError != null) {
-                Text(ui.submitError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                Text(ui.submitError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
             }
         }
 

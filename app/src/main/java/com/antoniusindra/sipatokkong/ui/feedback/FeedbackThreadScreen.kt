@@ -43,11 +43,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.antoniusindra.sipatokkong.data.model.Feedback
 import com.antoniusindra.sipatokkong.data.model.FeedbackReply
-
-private val MutedText = Color(0xFF6B7280)
-private val BrandTeal = Color(0xFF2E6E7E)
-private val MineBubble = Color(0xFFE8F1F2)
-private val OtherBubble = Color(0xFFF1F2F4)
+import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
+import com.antoniusindra.sipatokkong.ui.theme.MineBubble
+import com.antoniusindra.sipatokkong.ui.theme.MutedText
+import com.antoniusindra.sipatokkong.ui.theme.OtherBubble
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -129,16 +128,37 @@ private fun FeedbackDetailCard(fb: Feedback) {
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(
+                    modifier = Modifier.size(48.dp).background(MineBubble, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(getMoodEmoji(fb.mood), fontSize = 24.sp)
+                }
+                Column {
+                    Text("Kondisi Si Kecil", fontWeight = FontWeight.SemiBold, color = MutedText, style = MaterialTheme.typography.bodySmall)
+                    Text(fb.mood ?: "Normal", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+            }
+
             if (!fb.catatanPerilaku.isNullOrBlank()) {
                 LabeledText("Kondisi anak setelah terapi", fb.catatanPerilaku)
             }
             if (!fb.kendala.isNullOrBlank()) {
-                LabeledText("Kendala di rumah", fb.kendala)
+                LabeledText("Kendala / Status Terapi", fb.kendala)
             }
-            LabeledText("Catatan / feedback", fb.isi)
+            LabeledText("Catatan Tambahan", fb.isi)
         }
     }
+}
+
+private fun getMoodEmoji(mood: String?): String = when (mood) {
+    "Senang" -> "😊"
+    "Biasa" -> "😐"
+    "Rewel" -> "😢"
+    "Sakit" -> "🤒"
+    else -> "📝"
 }
 
 @Composable

@@ -46,10 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.antoniusindra.sipatokkong.data.model.Profile
-
-private val BrandTeal = Color(0xFF2E6E7E)
-private val IconBoxBg = Color(0xFFCDE7E0)
-private val MutedText = Color(0xFF6B7280)
+import com.antoniusindra.sipatokkong.ui.theme.MutedText
 
 @Composable
 fun ParentProfileScreen(

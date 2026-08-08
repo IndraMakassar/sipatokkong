@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.antoniusindra.sipatokkong.ui.theme.MutedText
 import com.antoniusindra.sipatokkong.ui.theme.SipatokkongTheme
 
 // ---------------------------------------------------------------------------
@@ -47,7 +48,6 @@ import com.antoniusindra.sipatokkong.ui.theme.SipatokkongTheme
 private val ScreenBg = Color(0xFFF6F7F9)
 private val BrandTeal = Color(0xFF2E6E7E)
 private val UnreadBg = Color(0xFFE8F1F2)
-private val MutedText = Color(0xFF6B7280)
 
 private val ReminderBoxBg = Color(0xFFCDE7E0)   // task reminders
 private val ReminderTint = Color(0xFF2E6E7E)

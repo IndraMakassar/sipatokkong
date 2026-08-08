@@ -20,8 +20,8 @@ import kotlinx.coroutines.launch
 data class CreateFeedbackUiState(
     val child: ChildOption? = null,
     val isLoadingChild: Boolean = true,
-    val catatanPerilaku: String = "",
-    val kendala: String = "",
+    val mood: String? = null,
+    val selectedChallenges: Set<String> = emptySet(),
     val isi: String = "",
     val isSubmitting: Boolean = false,
     val isSuccess: Boolean = false,
@@ -46,8 +46,19 @@ class CreateFeedbackViewModel(
         }
     }
 
-    fun onPerilakuChange(v: String) = _uiState.update { it.copy(catatanPerilaku = v) }
-    fun onKendalaChange(v: String) = _uiState.update { it.copy(kendala = v) }
+    fun onMoodChange(v: String) = _uiState.update { it.copy(mood = v) }
+
+    fun toggleChallenge(challenge: String) {
+        _uiState.update { s ->
+            val next = if (s.selectedChallenges.contains(challenge)) {
+                s.selectedChallenges - challenge
+            } else {
+                s.selectedChallenges + challenge
+            }
+            s.copy(selectedChallenges = next)
+        }
+    }
+
     fun onIsiChange(v: String) = _uiState.update { it.copy(isi = v, error = null) }
 
     fun submit() {
@@ -55,20 +66,30 @@ class CreateFeedbackViewModel(
         val orangtuaId = (sessionManager.state.value as? SessionManager.State.SignedIn)?.profile?.id
         when {
             s.child == null -> { _uiState.update { it.copy(error = "Data anak belum tersedia.") }; return }
-            s.isi.isBlank() -> { _uiState.update { it.copy(error = "Catatan/feedback utama wajib diisi.") }; return }
+            s.mood == null -> { _uiState.update { it.copy(error = "Pilih kondisi mood anak terlebih dahulu.") }; return }
+            s.isi.isBlank() && s.selectedChallenges.isEmpty() -> {
+                _uiState.update { it.copy(error = "Berikan catatan atau pilih kendala yang dialami.") }
+                return
+            }
             orangtuaId == null -> { _uiState.update { it.copy(error = "Sesi tidak valid. Login ulang.") }; return }
         }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSubmitting = true, error = null) }
             try {
+                // We simplify the input by combining challenges into kendala or prefixing isi
+                val kendalaText = if (s.selectedChallenges.isNotEmpty()) {
+                    s.selectedChallenges.joinToString(", ")
+                } else null
+
                 feedbackRepository.create(
                     FeedbackInsert(
-                        anakId = s.child!!.id,
-                        orangtuaId = orangtuaId!!,
-                        catatanPerilaku = s.catatanPerilaku.ifBlank { null },
-                        kendala = s.kendala.ifBlank { null },
-                        isi = s.isi.trim(),
+                        anakId = s.child.id,
+                        orangtuaId = orangtuaId,
+                        catatanPerilaku = null, // Simplified UI removes this field
+                        kendala = kendalaText,
+                        mood = s.mood,
+                        isi = s.isi.trim().ifBlank { "Catatan rutin perkembangan anak." },
                     )
                 )
                 _uiState.update { it.copy(isSubmitting = false, isSuccess = true) }

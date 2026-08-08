@@ -39,10 +39,10 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 ## Change Log
 
 ### [2026-08-09] - UI Refinement: TaskCard Alignment
-* **TaskCard Layout Update:** Realigned the `TaskCard` component to improve information hierarchy.
-    *   Moved the task title to be in line with the task icon and status chip.
-    *   Switched to a `Row`-first layout for the card content, ensuring instructions and deadlines are indented relative to the icon.
-    *   Maintained consistent styling across the Home and History screens by updating the shared `internal` component.
+* **TaskCard Layout Update:** Realigned the `TaskCard` component to improve information hierarchy based on user feedback.
+    *   Moved the task instruction and deadline to be left-aligned with the task icon, rather than indented with the title.
+    *   Switched to a vertical `Column` layout where the top row contains the Icon, Title, and Status Chip, and the body contains the instructions.
+    *   This ensures the "task text" (instructions) occupies more horizontal space and is visually anchored by the icon's vertical axis.
 * **Visual Progress Tracking:** Refactored the behavior note/feedback system to be more visual.
     *   Added **Mood Selector** (😊, 😐, 😢, 🤒) for quick child status reporting.
     *   Implemented **Quick-Select Chips** for common therapy hurdles (e.g., "Sulit Fokus").
