@@ -38,20 +38,28 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 
 ## Change Log
 
-### [2026-08-09] - UI Refinement: TaskCard Alignment
-* **TaskCard Layout Update:** Realigned the `TaskCard` component to improve information hierarchy based on user feedback.
-    *   Moved the task instruction and deadline to be left-aligned with the task icon, rather than indented with the title.
-    *   Switched to a vertical `Column` layout where the top row contains the Icon, Title, and Status Chip, and the body contains the instructions.
-    *   This ensures the "task text" (instructions) occupies more horizontal space and is visually anchored by the icon's vertical axis.
-* **Visual Progress Tracking:** Refactored the behavior note/feedback system to be more visual.
-    *   Added **Mood Selector** (😊, 😐, 😢, 🤒) for quick child status reporting.
-    *   Implemented **Quick-Select Chips** for common therapy hurdles (e.g., "Sulit Fokus").
-    *   Simplified input from three mandatory fields to a mood + chips + optional notes structure.
-* **UI/UX Consistency:**
-    *   Centralized brand colors (Teal, Orange, Status colors) in `Color.kt`.
-    *   Renamed UI titles to formal "Catatan Perkembangan Anak" to maintain professionalism while improving accessibility.
-    *   Updated list and thread views to prominently display mood icons.
-* **Data Model Update:** Added `mood` field to `Feedback` entities in the Kotlin layer. (Note: Supabase schema requires corresponding `mood` column).
+### [2026-08-09] - Profile Screen Redesign & Global Styling
+* **Profile Screen UX Overhaul:**
+    *   Redesigned `ParentProfileScreen` header to match the `WeeklyProgressCard` aesthetic, featuring a `BrandTeal` gradient and subtle geometric decorations.
+    *   Standardized section headers by removing "weird" teal coloring from "Informasi Kontak", now using `onSurface` color for better readability and M3 compliance.
+    *   Improved layout consistency with `20.dp` rounded corners and white cards over `AppBackground`.
+    *   Updated the Logout button to a high-contrast Material 3 `errorContainer` style.
+* **Global Style Centralization:**
+    *   Promoted `ProgressGradTop`, `ProgressGradBottom`, and `IconBoxBg` to `Color.kt` to ensure visual consistency across the entire parent module.
+    *   Refactored `ParentHomeScreen` to consume these global color constants.
+
+### [2026-08-09] - UI/UX Consistency & Material 3 Refinement
+* **Standardized Backgrounds:** Centralized `AppBackground` (0xFFF6F7F9) in `Color.kt` and applied it to all parent module screens (`ParentHomeScreen`, `FeedbackListScreen`, `TaskDetailScreen`, etc.).
+* **Material 3 TopAppBar Integration:**
+    *   Ensured every page in the parent module has a `TopAppBar`.
+    *   Refactored `ParentHomeScreen` to use a single `TopAppBar` that dynamically updates its title based on the active tab (Home, Catatan, Profil).
+    *   Removed nested `Scaffold` issues by introducing a `useScaffold` flag in `FeedbackListScreen`.
+* **Brand Theme Alignment:**
+    *   Updated `SipatokkongTheme` to use `BrandTeal` as the primary color and `BrandOrange` as secondary.
+    *   Standardized status chip colors (Green, Orange, Red, Teal) across the application by moving them to `Color.kt`.
+* **Parent Profile Refinement:**
+    *   Updated `ParentProfileScreen` to use Material 3 semantic colors (`onBackground`, `primaryContainer`, etc.) instead of hardcoded values.
+    *   Integrated the profile screen seamlessly into the home dashboard's navigation flow with consistent top bar actions.
 
 ### [2026-08-08] - Enhanced Rich Text Support & Volunteer UX
 * **Auto-Incrementing Lists:** Numbered lists in `RichTextUtil` now automatically increment (e.g., typing `1.` on every line renders as `1.`, `2.`, `3.`).

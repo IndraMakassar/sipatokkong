@@ -31,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -39,6 +40,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -46,7 +50,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.antoniusindra.sipatokkong.data.model.Profile
+import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
+import com.antoniusindra.sipatokkong.ui.theme.IconBoxBg
 import com.antoniusindra.sipatokkong.ui.theme.MutedText
+import com.antoniusindra.sipatokkong.ui.theme.ProgressGradBottom
+import com.antoniusindra.sipatokkong.ui.theme.ProgressGradTop
 
 @Composable
 fun ParentProfileScreen(
@@ -64,57 +72,89 @@ fun ParentProfileScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        // Profile Header
-        Box(
-            modifier = Modifier
-                .size(100.dp)
-                .background(IconBoxBg, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.Filled.Person,
-                contentDescription = null,
-                tint = BrandTeal,
-                modifier = Modifier.size(60.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (uiState.isEditing) {
-            OutlinedTextField(
-                value = uiState.editedName,
-                onValueChange = viewModel::onNameChange,
-                label = { Text("Nama Lengkap") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-        } else {
-            Text(
-                text = uiState.profile?.fullName ?: profile.fullName,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.Black
-            )
-            Text(
-                text = "Orang Tua",
-                fontSize = 16.sp,
-                color = MutedText
-            )
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
+        // Profile Header Card
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .drawWithCache {
+                        val gradient = Brush.linearGradient(listOf(ProgressGradTop, ProgressGradBottom))
+                        onDrawBehind {
+                            drawRect(gradient)
+                            drawCircle(
+                                color = Color.White.copy(alpha = 0.10f),
+                                radius = size.minDimension * 0.45f,
+                                center = Offset(size.width * 0.95f, size.height * 0.2f),
+                            )
+                        }
+                    }
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .background(Color.White.copy(alpha = 0.2f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.Person,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(48.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (uiState.isEditing) {
+                    OutlinedTextField(
+                        value = uiState.editedName,
+                        onValueChange = viewModel::onNameChange,
+                        label = { Text("Nama Lengkap", color = Color.White.copy(alpha = 0.7f)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color.White,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
+                            focusedLabelColor = Color.White,
+                            unfocusedLabelColor = Color.White.copy(alpha = 0.7f)
+                        )
+                    )
+                } else {
+                    Text(
+                        text = uiState.profile?.fullName ?: profile.fullName,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Orang Tua",
+                        fontSize = 14.sp,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
+            }
+        }
+
+        // Contact Info Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -122,20 +162,23 @@ fun ParentProfileScreen(
                 ) {
                     Text(
                         "Informasi Kontak",
-                        fontSize = 18.sp,
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
-                        color = BrandTeal
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     if (!uiState.isEditing) {
-                        TextButton(onClick = { viewModel.startEditing() }) {
-                            Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                        TextButton(
+                            onClick = { viewModel.startEditing() },
+                            colors = ButtonDefaults.textButtonColors(contentColor = BrandTeal)
+                        ) {
+                            Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Ubah")
+                            Text("Ubah", fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f))
 
                 if (uiState.isEditing) {
                     ProfileEditField(
@@ -144,7 +187,6 @@ fun ParentProfileScreen(
                         onValueChange = viewModel::onPhoneChange,
                         icon = Icons.Filled.Phone
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
                     ProfileEditField(
                         label = "Alamat",
                         value = uiState.editedAddress,
@@ -158,13 +200,11 @@ fun ParentProfileScreen(
                         label = "Telepon",
                         value = uiState.profile?.phone ?: profile.phone ?: "-"
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
                     ProfileInfoRow(
                         icon = Icons.Filled.LocationOn,
                         label = "Alamat",
                         value = uiState.profile?.address ?: profile.address ?: "-"
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
                     ProfileInfoRow(
                         icon = Icons.Filled.Person,
                         label = "Status Keluarga",
@@ -174,64 +214,67 @@ fun ParentProfileScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
+        // Actions
         if (uiState.isEditing) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(
                     onClick = { viewModel.cancelEditing() },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f).height(50.dp),
+                    shape = RoundedCornerShape(14.dp),
                     enabled = !uiState.isLoading
                 ) {
                     Text("Batal")
                 }
                 Button(
                     onClick = { viewModel.saveProfile() },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f).height(50.dp),
+                    shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = BrandTeal),
                     enabled = !uiState.isLoading
                 ) {
                     if (uiState.isLoading) {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
                     } else {
-                        Text("Simpan")
+                        Text("Simpan", fontWeight = FontWeight.Bold)
                     }
                 }
             }
         } else {
             Button(
                 onClick = onLogout,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFEE2E2)),
-                shape = RoundedCornerShape(12.dp)
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                ),
+                shape = RoundedCornerShape(14.dp)
             ) {
-                Text("Keluar", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                Text("Keluar dari Akun", fontWeight = FontWeight.Bold)
             }
         }
 
         if (uiState.error != null) {
-            Spacer(modifier = Modifier.height(16.dp))
             Text(uiState.error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
+        
+        Spacer(Modifier.height(20.dp))
     }
 }
 
 @Composable
 private fun ProfileInfoRow(icon: ImageVector, label: String, value: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
-                .size(36.dp)
-                .background(IconBoxBg.copy(alpha = 0.5f), CircleShape),
+                .size(40.dp)
+                .background(IconBoxBg, RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
         ) {
             Icon(icon, contentDescription = null, tint = BrandTeal, modifier = Modifier.size(20.dp))
         }
         Spacer(modifier = Modifier.width(16.dp))
         Column {
-            Text(label, fontSize = 12.sp, color = MutedText)
+            Text(label, fontSize = 12.sp, color = MutedText, fontWeight = FontWeight.Medium)
             Text(value, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color.Black)
         }
     }
@@ -252,6 +295,7 @@ private fun ProfileEditField(
         modifier = Modifier.fillMaxWidth(),
         leadingIcon = { Icon(icon, contentDescription = null, tint = BrandTeal) },
         singleLine = singleLine,
-        maxLines = if (singleLine) 1 else 3
+        maxLines = if (singleLine) 1 else 3,
+        shape = RoundedCornerShape(12.dp)
     )
 }

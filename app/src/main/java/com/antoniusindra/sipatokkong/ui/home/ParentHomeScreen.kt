@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -36,6 +37,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -56,28 +59,27 @@ import com.antoniusindra.sipatokkong.data.model.Task
 import com.antoniusindra.sipatokkong.data.model.UserRole
 import com.antoniusindra.sipatokkong.ui.components.RichTextDisplay
 import com.antoniusindra.sipatokkong.ui.feedback.FeedbackListScreen
+import com.antoniusindra.sipatokkong.ui.theme.AppBackground
+import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
+import com.antoniusindra.sipatokkong.ui.theme.IconBoxBg
 import com.antoniusindra.sipatokkong.ui.theme.MutedText
+import com.antoniusindra.sipatokkong.ui.theme.ProgressGradBottom
+import com.antoniusindra.sipatokkong.ui.theme.ProgressGradTop
 import com.antoniusindra.sipatokkong.ui.theme.SipatokkongTheme
+import com.antoniusindra.sipatokkong.ui.theme.StatusGreenBg
+import com.antoniusindra.sipatokkong.ui.theme.StatusGreenText
+import com.antoniusindra.sipatokkong.ui.theme.StatusOrangeBg
+import com.antoniusindra.sipatokkong.ui.theme.StatusOrangeText
+import com.antoniusindra.sipatokkong.ui.theme.StatusRedBg
+import com.antoniusindra.sipatokkong.ui.theme.StatusRedText
+import com.antoniusindra.sipatokkong.ui.theme.StatusTealBg
+import com.antoniusindra.sipatokkong.ui.theme.StatusTealText
 
 // ---------------------------------------------------------------------------
 // Local brand palette — scoped to this screen so it matches the mockup exactly
 // without touching the global (purple / dynamic-color) theme.
 // ---------------------------------------------------------------------------
-internal val ScreenBg = Color(0xFFF6F7F9)
-internal val BrandTeal = Color(0xFF2E6E7E)
-internal val ProgressGradTop = Color(0xFF357C8D)
-internal val ProgressGradBottom = Color(0xFF24596A)
-internal val IconBoxBg = Color(0xFFCDE7E0)
 internal val IconTint = Color(0xFF2E6E7E)
-
-private val ChipWaitingBg = Color(0xFFF8DDB8)
-private val ChipWaitingText = Color(0xFF8A5A1E)
-private val ChipRunningBg = Color(0xFFBFE3CE)
-private val ChipRunningText = Color(0xFF2E6E4E)
-private val ChipDoneBg = Color(0xFFCDE7E0)
-private val ChipDoneText = Color(0xFF2E6E7E)
-private val ChipOverdueBg = Color(0xFFF6D2CE)
-private val ChipOverdueText = Color(0xFF9B3B31)
 
 internal val TipsBg = Color(0xFFECEDEE)
 internal val TipsIcon = Color(0xFFD9A521)
@@ -86,13 +88,14 @@ internal val TipsIcon = Color(0xFFD9A521)
 internal data class StatusStyle(val label: String, val bg: Color, val text: Color)
 
 internal fun statusStyle(status: String): StatusStyle = when (status) {
-    "done" -> StatusStyle("Selesai", ChipDoneBg, ChipDoneText)
-    "submitted" -> StatusStyle("Dikirim", ChipRunningBg, ChipRunningText)
-    "overdue" -> StatusStyle("Terlambat", ChipOverdueBg, ChipOverdueText)
-    else -> StatusStyle("Menunggu", ChipWaitingBg, ChipWaitingText) // assigned
+    "done" -> StatusStyle("Selesai", StatusTealBg, StatusTealText)
+    "submitted" -> StatusStyle("Dikirim", StatusGreenBg, StatusGreenText)
+    "overdue" -> StatusStyle("Terlambat", StatusRedBg, StatusRedText)
+    else -> StatusStyle("Menunggu", StatusOrangeBg, StatusOrangeText) // assigned
 }
 
 /** Parent (Orang Tua) home dashboard. Mirrors `assests/dashboard orang tua.png`. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ParentHomeScreen(
     profile: Profile,
@@ -107,13 +110,39 @@ fun ParentHomeScreen(
     childName: String = "Almair",
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    val title = when (selectedTab) {
+        0 -> "Sipatokkong"
+        1 -> "Catatan Perilaku"
+        else -> "Profil"
+    }
 
     Scaffold(
-        containerColor = ScreenBg,
+        containerColor = AppBackground,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        title,
+                        fontWeight = FontWeight.Bold,
+                        color = if (selectedTab == 0) BrandTeal else Color.Black
+                    )
+                },
+                actions = {
+                    if (selectedTab == 0) {
+                        IconButton(onClick = onOpenNotifications) {
+                            Icon(Icons.Filled.Notifications, contentDescription = "Notifikasi", tint = MutedText)
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = AppBackground,
+                )
+            )
+        },
         bottomBar = {
             NavigationBar(containerColor = Color.White) {
                 ParentNavItem(selectedTab == 0, Icons.Filled.Home, "Beranda") { selectedTab = 0 }
-                ParentNavItem(selectedTab == 1, Icons.AutoMirrored.Filled.Chat, "Catatan Perilaku") { selectedTab = 1 }
+                ParentNavItem(selectedTab == 1, Icons.AutoMirrored.Filled.Chat, "Catatan") { selectedTab = 1 }
                 ParentNavItem(selectedTab == 2, Icons.Filled.Person, "Profil") { selectedTab = 2 }
             }
         }
@@ -125,7 +154,6 @@ fun ParentHomeScreen(
                     childName = childName,
                     tasks = tasks,
                     isLoadingTasks = isLoadingTasks,
-                    onOpenNotifications = onOpenNotifications,
                     onOpenTask = onOpenTask,
                     onSeeAllHistory = onSeeAllHistory,
                 )
@@ -133,6 +161,7 @@ fun ParentHomeScreen(
                     title = "Catatan Perilaku & Feedback",
                     onOpenThread = onOpenFeedbackThread,
                     onCompose = onComposeFeedback,
+                    useScaffold = false // I will add this parameter to FeedbackListScreen
                 )
                 else -> ParentProfileScreen(profile = profile, onLogout = onLogout)
             }
@@ -146,7 +175,6 @@ private fun BerandaContent(
     childName: String,
     tasks: List<Task>,
     isLoadingTasks: Boolean,
-    onOpenNotifications: () -> Unit,
     onOpenTask: (String) -> Unit,
     onSeeAllHistory: () -> Unit,
 ) {
@@ -155,12 +183,10 @@ private fun BerandaContent(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
-            .padding(top = 12.dp, bottom = 24.dp),
+            .padding(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        ParentTopBar(onBellClick = onOpenNotifications)
-
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.padding(top = 12.dp)) {
             Text("Selamat pagi,", style = MaterialTheme.typography.bodyMedium, color = MutedText)
             Text("Halo, ${profile.fullName}!", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         }
@@ -186,29 +212,6 @@ private fun BerandaContent(
         }
 
 //        TipsCard(childName = childName)
-    }
-}
-
-@Composable
-private fun ParentTopBar(onBellClick: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier.size(40.dp).background(IconBoxBg, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Filled.Person, contentDescription = "Foto profil", tint = BrandTeal)
-        }
-        Spacer(Modifier.width(10.dp))
-        Text(
-            "Sipatokkong",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            color = BrandTeal,
-            modifier = Modifier.weight(1f)
-        )
-        IconButton(onClick = onBellClick) {
-            Icon(Icons.Filled.Notifications, contentDescription = "Notifikasi", tint = MutedText)
-        }
     }
 }
 
@@ -320,6 +323,7 @@ internal fun TaskCard(task: Task, onClick: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+
                 Box(
                     modifier = Modifier
                         .size(48.dp)

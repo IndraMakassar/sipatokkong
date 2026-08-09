@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
 import com.antoniusindra.sipatokkong.ui.theme.MutedText
 import com.antoniusindra.sipatokkong.ui.theme.SipatokkongTheme
 
@@ -45,8 +46,6 @@ import com.antoniusindra.sipatokkong.ui.theme.SipatokkongTheme
 // Local palette — kept in sync with the parent dashboard (teal), scoped here so
 // it doesn't depend on the global theme.
 // ---------------------------------------------------------------------------
-private val ScreenBg = Color(0xFFF6F7F9)
-private val BrandTeal = Color(0xFF2E6E7E)
 private val UnreadBg = Color(0xFFE8F1F2)
 
 private val ReminderBoxBg = Color(0xFFCDE7E0)   // task reminders
@@ -107,7 +106,7 @@ fun ParentNotificationScreen(
     notifications: List<ParentNotification> = sampleNotifications,
 ) {
     Scaffold(
-        containerColor = ScreenBg,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text("Notifikasi", fontWeight = FontWeight.Bold) },
@@ -117,7 +116,7 @@ fun ParentNotificationScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.White,
+                    containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = BrandTeal,
                     navigationIconContentColor = BrandTeal,
                 )

@@ -54,10 +54,8 @@ import coil3.compose.AsyncImage
 import com.antoniusindra.sipatokkong.data.model.ChildResponse
 import com.antoniusindra.sipatokkong.data.model.MediaKind
 import com.antoniusindra.sipatokkong.ui.components.RichTextDisplay
+import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
 import com.antoniusindra.sipatokkong.ui.theme.MutedText
-
-private val ScreenBg = Color(0xFFF6F7F9)
-private val BrandTeal = Color(0xFF2E6E7E)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,7 +80,7 @@ fun TaskDetailScreen(
     ) { uri -> if (uri != null) viewModel.onProofPicked(uri) }
 
     Scaffold(
-        containerColor = ScreenBg,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text("Program Ajar", fontWeight = FontWeight.Bold) },
@@ -92,7 +90,7 @@ fun TaskDetailScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = ScreenBg,
+                    containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = BrandTeal,
                     navigationIconContentColor = BrandTeal,
                 )

@@ -26,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -69,47 +70,74 @@ fun FeedbackListScreen(
     title: String,
     onOpenThread: (String) -> Unit,
     onCompose: (() -> Unit)? = null,
+    useScaffold: Boolean = true,
     viewModel: FeedbackListViewModel = viewModel(factory = FeedbackListViewModel.Factory),
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(title, fontWeight = FontWeight.Bold) },
-            )
-        },
-        floatingActionButton = {
+    val content = @Composable { padding: androidx.compose.foundation.layout.PaddingValues ->
+        when {
+            ui.isLoading -> Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) {
+                CircularProgressIndicator()
+            }
+
+            ui.error != null -> Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) {
+                Text(ui.error!!, color = MaterialTheme.colorScheme.error)
+            }
+
+            ui.items.isEmpty() -> Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) {
+                Text("Belum ada catatan/feedback.", color = MutedText)
+            }
+
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(ui.items) { fb -> FeedbackRow(fb, onClick = { onOpenThread(fb.id) }) }
+            }
+        }
+    }
+
+    if (useScaffold) {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            topBar = {
+                TopAppBar(
+                    title = { Text(title, fontWeight = FontWeight.Bold) },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                    )
+                )
+            },
+            floatingActionButton = {
+                if (onCompose != null) {
+                    ExtendedFloatingActionButton(
+                        onClick = onCompose,
+                        icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                        text = { Text("Tambah Catatan") },
+                        containerColor = BrandTeal,
+                        contentColor = Color.White
+                    )
+                }
+            }
+        ) { innerPadding ->
+            content(innerPadding)
+        }
+    } else {
+        Box(modifier = Modifier.fillMaxSize()) {
+            content(androidx.compose.foundation.layout.PaddingValues(0.dp))
             if (onCompose != null) {
                 ExtendedFloatingActionButton(
                     onClick = onCompose,
                     icon = { Icon(Icons.Filled.Add, contentDescription = null) },
                     text = { Text("Tambah Catatan") },
                     containerColor = BrandTeal,
-                    contentColor = Color.White
+                    contentColor = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp)
                 )
-            }
-        }
-    ) { innerPadding ->
-        when {
-            ui.isLoading -> Box(Modifier.fillMaxSize().padding(innerPadding), Alignment.Center) {
-                CircularProgressIndicator()
-            }
-
-            ui.error != null -> Box(Modifier.fillMaxSize().padding(innerPadding), Alignment.Center) {
-                Text(ui.error!!, color = MaterialTheme.colorScheme.error)
-            }
-
-            ui.items.isEmpty() -> Box(Modifier.fillMaxSize().padding(innerPadding), Alignment.Center) {
-                Text("Belum ada catatan/feedback.", color = MutedText)
-            }
-
-            else -> LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(innerPadding),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(ui.items) { fb -> FeedbackRow(fb, onClick = { onOpenThread(fb.id) }) }
             }
         }
     }
