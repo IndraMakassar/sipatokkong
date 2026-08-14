@@ -20,8 +20,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Notifications
@@ -29,7 +27,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -39,6 +37,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -57,73 +57,92 @@ import androidx.compose.ui.unit.sp
 import com.antoniusindra.sipatokkong.data.model.Profile
 import com.antoniusindra.sipatokkong.data.model.Task
 import com.antoniusindra.sipatokkong.data.model.UserRole
+import com.antoniusindra.sipatokkong.ui.components.RichTextDisplay
+import com.antoniusindra.sipatokkong.ui.feedback.FeedbackListScreen
+import com.antoniusindra.sipatokkong.ui.theme.AppBackground
+import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
+import com.antoniusindra.sipatokkong.ui.theme.IconBoxBg
+import com.antoniusindra.sipatokkong.ui.theme.MutedText
+import com.antoniusindra.sipatokkong.ui.theme.ProgressGradBottom
+import com.antoniusindra.sipatokkong.ui.theme.ProgressGradTop
 import com.antoniusindra.sipatokkong.ui.theme.SipatokkongTheme
+import com.antoniusindra.sipatokkong.ui.theme.StatusGreenBg
+import com.antoniusindra.sipatokkong.ui.theme.StatusGreenText
+import com.antoniusindra.sipatokkong.ui.theme.StatusOrangeBg
+import com.antoniusindra.sipatokkong.ui.theme.StatusOrangeText
+import com.antoniusindra.sipatokkong.ui.theme.StatusRedBg
+import com.antoniusindra.sipatokkong.ui.theme.StatusRedText
+import com.antoniusindra.sipatokkong.ui.theme.StatusTealBg
+import com.antoniusindra.sipatokkong.ui.theme.StatusTealText
 
 // ---------------------------------------------------------------------------
 // Local brand palette — scoped to this screen so it matches the mockup exactly
 // without touching the global (purple / dynamic-color) theme.
 // ---------------------------------------------------------------------------
-private val ScreenBg = Color(0xFFF6F7F9)
-private val BrandTeal = Color(0xFF2E6E7E)
-private val ProgressGradTop = Color(0xFF357C8D)
-private val ProgressGradBottom = Color(0xFF24596A)
-private val IconBoxBg = Color(0xFFCDE7E0)
-private val IconTint = Color(0xFF2E6E7E)
+internal val IconTint = Color(0xFF2E6E7E)
 
-private val ChipWaitingBg = Color(0xFFF8DDB8)
-private val ChipWaitingText = Color(0xFF8A5A1E)
-private val ChipRunningBg = Color(0xFFBFE3CE)
-private val ChipRunningText = Color(0xFF2E6E4E)
-private val ChipDoneBg = Color(0xFFCDE7E0)
-private val ChipDoneText = Color(0xFF2E6E7E)
-private val ChipOverdueBg = Color(0xFFF6D2CE)
-private val ChipOverdueText = Color(0xFF9B3B31)
-
-private val TipsBg = Color(0xFFECEDEE)
-private val TipsIcon = Color(0xFFD9A521)
-private val MutedText = Color(0xFF6B7280)
+internal val TipsBg = Color(0xFFECEDEE)
+internal val TipsIcon = Color(0xFFD9A521)
 
 /** Maps a `tugas.status` value to a display chip (label + colors). */
-private data class StatusStyle(val label: String, val bg: Color, val text: Color)
+internal data class StatusStyle(val label: String, val bg: Color, val text: Color)
 
-private fun statusStyle(status: String): StatusStyle = when (status) {
-    "done" -> StatusStyle("Selesai", ChipDoneBg, ChipDoneText)
-    "submitted" -> StatusStyle("Dikirim", ChipRunningBg, ChipRunningText)
-    "overdue" -> StatusStyle("Terlambat", ChipOverdueBg, ChipOverdueText)
-    else -> StatusStyle("Menunggu", ChipWaitingBg, ChipWaitingText) // assigned
+internal fun statusStyle(status: String): StatusStyle = when (status) {
+    "done" -> StatusStyle("Selesai", StatusTealBg, StatusTealText)
+    "submitted" -> StatusStyle("Dikirim", StatusGreenBg, StatusGreenText)
+    "overdue" -> StatusStyle("Terlambat", StatusRedBg, StatusRedText)
+    else -> StatusStyle("Menunggu", StatusOrangeBg, StatusOrangeText) // assigned
 }
 
 /** Parent (Orang Tua) home dashboard. Mirrors `assests/dashboard orang tua.png`. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ParentHomeScreen(
     profile: Profile,
     onLogout: () -> Unit,
     onOpenNotifications: () -> Unit = {},
     onOpenTask: (String) -> Unit = {},
-    onOpenFeedbackList: () -> Unit = {},
+    onOpenFeedbackThread: (String) -> Unit = {},
+    onComposeFeedback: () -> Unit = {},
+    onSeeAllHistory: () -> Unit = {},
     tasks: List<Task> = emptyList(),
     isLoadingTasks: Boolean = false,
     childName: String = "Almair",
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    val title = when (selectedTab) {
+        0 -> "Sipatokkong"
+        1 -> "Catatan Perilaku"
+        else -> "Profil"
+    }
 
     Scaffold(
-        containerColor = ScreenBg,
-        floatingActionButton = {
-            if (selectedTab == 0) {
-                FloatingActionButton(
-                    onClick = onOpenFeedbackList,
-                    containerColor = BrandTeal,
-                    contentColor = Color.White,
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Catatan & Feedback")
-                }
-            }
+        containerColor = AppBackground,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        title,
+                        fontWeight = FontWeight.Bold,
+                        color = if (selectedTab == 0) BrandTeal else Color.Black
+                    )
+                },
+                actions = {
+                    if (selectedTab == 0) {
+                        IconButton(onClick = onOpenNotifications) {
+                            Icon(Icons.Filled.Notifications, contentDescription = "Notifikasi", tint = MutedText)
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = AppBackground,
+                )
+            )
         },
         bottomBar = {
             NavigationBar(containerColor = Color.White) {
                 ParentNavItem(selectedTab == 0, Icons.Filled.Home, "Beranda") { selectedTab = 0 }
-                ParentNavItem(selectedTab == 1, Icons.Filled.History, "Riwayat") { selectedTab = 1 }
+                ParentNavItem(selectedTab == 1, Icons.AutoMirrored.Filled.Chat, "Catatan") { selectedTab = 1 }
                 ParentNavItem(selectedTab == 2, Icons.Filled.Person, "Profil") { selectedTab = 2 }
             }
         }
@@ -135,10 +154,15 @@ fun ParentHomeScreen(
                     childName = childName,
                     tasks = tasks,
                     isLoadingTasks = isLoadingTasks,
-                    onOpenNotifications = onOpenNotifications,
                     onOpenTask = onOpenTask,
+                    onSeeAllHistory = onSeeAllHistory,
                 )
-                1 -> PlaceholderTab("Riwayat")
+                1 -> FeedbackListScreen(
+                    title = "Catatan Perilaku & Feedback",
+                    onOpenThread = onOpenFeedbackThread,
+                    onCompose = onComposeFeedback,
+                    useScaffold = false // I will add this parameter to FeedbackListScreen
+                )
                 else -> ParentProfileScreen(profile = profile, onLogout = onLogout)
             }
         }
@@ -151,27 +175,25 @@ private fun BerandaContent(
     childName: String,
     tasks: List<Task>,
     isLoadingTasks: Boolean,
-    onOpenNotifications: () -> Unit,
     onOpenTask: (String) -> Unit,
+    onSeeAllHistory: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
-            .padding(top = 12.dp, bottom = 24.dp),
+            .padding(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        ParentTopBar(onBellClick = onOpenNotifications)
-
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.padding(top = 12.dp)) {
             Text("Selamat pagi,", style = MaterialTheme.typography.bodyMedium, color = MutedText)
             Text("Halo, ${profile.fullName}!", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         }
 
         WeeklyProgressCard(childName = childName, tasks = tasks)
 
-        SectionHeader()
+        SectionHeader(onSeeAllClick = onSeeAllHistory)
 
         val activeTasks = tasks.filter { it.status != "done" }
         when {
@@ -189,30 +211,7 @@ private fun BerandaContent(
             else -> activeTasks.forEach { task -> TaskCard(task, onClick = { onOpenTask(task.id) }) }
         }
 
-        TipsCard(childName = childName)
-    }
-}
-
-@Composable
-private fun ParentTopBar(onBellClick: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier.size(40.dp).background(IconBoxBg, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Filled.Person, contentDescription = "Foto profil", tint = BrandTeal)
-        }
-        Spacer(Modifier.width(10.dp))
-        Text(
-            "Sipatokkong",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            color = BrandTeal,
-            modifier = Modifier.weight(1f)
-        )
-        IconButton(onClick = onBellClick) {
-            Icon(Icons.Filled.Notifications, contentDescription = "Notifikasi", tint = MutedText)
-        }
+//        TipsCard(childName = childName)
     }
 }
 
@@ -285,7 +284,7 @@ private fun WeeklyProgressCard(childName: String, tasks: List<Task>) {
 }
 
 @Composable
-private fun SectionHeader() {
+private fun SectionHeader(onSeeAllClick: () -> Unit) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             "Tugas Terapi Minggu Ini",
@@ -298,12 +297,13 @@ private fun SectionHeader() {
             color = BrandTeal,
             fontWeight = FontWeight.SemiBold,
             style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.clickable { onSeeAllClick() }
         )
     }
 }
 
 @Composable
-private fun TaskCard(task: Task, onClick: () -> Unit) {
+internal fun TaskCard(task: Task, onClick: () -> Unit) {
     val style = statusStyle(task.status)
     Card(
         onClick = onClick,
@@ -313,35 +313,56 @@ private fun TaskCard(task: Task, onClick: () -> Unit) {
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(verticalAlignment = Alignment.Top) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
                 Box(
-                    modifier = Modifier.size(48.dp).background(IconBoxBg, RoundedCornerShape(14.dp)),
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(IconBoxBg, RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.Assignment, contentDescription = null, tint = IconTint)
+                    Icon(
+                        Icons.AutoMirrored.Filled.Assignment,
+                        contentDescription = null,
+                        tint = IconTint
+                    )
                 }
-                Spacer(Modifier.weight(1f))
+
+                Text(
+                    task.judul,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+
                 StatusChip(style.label, style.bg, style.text)
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(task.judul, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                if (!task.instruksi.isNullOrBlank()) {
-                    Text(
-                        task.instruksi,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MutedText,
-                    )
-                }
-                if (!task.deadline.isNullOrBlank()) {
-                    Text(
-                        "Deadline: ${task.deadline}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MutedText,
-                    )
+            if (!task.instruksi.isNullOrBlank() || !task.deadline.isNullOrBlank()) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (!task.instruksi.isNullOrBlank()) {
+                        RichTextDisplay(
+                            task.instruksi,
+                            style = MaterialTheme.typography.bodyMedium.copy(color = MutedText),
+                            maxLines = 2
+                        )
+                    }
+                    if (!task.deadline.isNullOrBlank()) {
+                        Text(
+                            "Deadline: ${task.deadline}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MutedText,
+                        )
+                    }
                 }
             }
         }
@@ -349,7 +370,7 @@ private fun TaskCard(task: Task, onClick: () -> Unit) {
 }
 
 @Composable
-private fun StatusChip(label: String, bg: Color, textColor: Color) {
+internal fun StatusChip(label: String, bg: Color, textColor: Color) {
     Box(
         modifier = Modifier.background(bg, CircleShape).padding(horizontal = 14.dp, vertical = 6.dp)
     ) {
@@ -379,67 +400,6 @@ private fun TipsCard(childName: String) {
     }
 }
 
-@Composable
-private fun RiwayatContent(tasks: List<Task>, onOpenTask: (String) -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp)
-            .padding(top = 16.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text("Riwayat Tugas Selesai", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-
-        if (tasks.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Filled.History,
-                        contentDescription = null,
-                        tint = MutedText,
-                        modifier = Modifier.size(40.dp),
-                    )
-                    Spacer(Modifier.size(12.dp))
-                    Text("Belum ada tugas yang selesai.", color = MutedText)
-                }
-            }
-        } else {
-            tasks.forEach { task -> TaskCard(task, onClick = { onOpenTask(task.id) }) }
-        }
-    }
-}
-
-@Composable
-private fun PlaceholderTab(label: String, onLogout: (() -> Unit)? = null) {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            Icons.AutoMirrored.Filled.List,
-            contentDescription = null,
-            tint = MutedText,
-            modifier = Modifier.size(40.dp)
-        )
-        Spacer(Modifier.size(12.dp))
-        Text(label, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        Text("Segera hadir", color = MutedText, style = MaterialTheme.typography.bodyMedium)
-        if (onLogout != null) {
-            Spacer(Modifier.size(20.dp))
-            Text(
-                "Keluar",
-                color = MaterialTheme.colorScheme.error,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable { onLogout() }
-            )
-        }
-    }
-}
 
 @Composable
 private fun androidx.compose.foundation.layout.RowScope.ParentNavItem(

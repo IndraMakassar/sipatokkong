@@ -6,7 +6,6 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,26 +15,29 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Title
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -50,8 +52,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -71,6 +76,8 @@ fun CreateTaskScreen(
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    var instruksiValue by remember { mutableStateOf(TextFieldValue(ui.instruksi)) }
 
     LaunchedEffect(ui.isSuccess) {
         if (ui.isSuccess) {
@@ -122,11 +129,38 @@ fun CreateTaskScreen(
             )
 
             // ---- Instruksi ----
+            SectionLabel("Instruksi / Deskripsi Tugas")
+            FormattingToolbar(
+                onAction = { action ->
+                    val text = instruksiValue.text
+                    val selection = instruksiValue.selection
+                    val selectedText = text.substring(selection.start, selection.end)
+
+                    val (newText, newSelection) = when (action) {
+                        "bold" -> {
+                            val replacement = "**$selectedText**"
+                            val transformed = text.substring(0, selection.start) + replacement + text.substring(selection.end)
+                            val cursorOffset = if (selectedText.isEmpty()) selection.start + 2 else selection.start + replacement.length
+                            transformed to TextRange(cursorOffset)
+                        }
+                        "header" -> insertBlockTag(text, selection, "### ")
+                        "list" -> insertBlockTag(text, selection, "- ")
+                        else -> text to selection
+                    }
+
+                    instruksiValue = TextFieldValue(newText, newSelection)
+                    viewModel.onInstruksiChange(newText)
+                }
+            )
             OutlinedTextField(
-                value = ui.instruksi,
-                onValueChange = viewModel::onInstruksiChange,
-                label = { Text("Instruksi / Deskripsi Tugas") },
-                minLines = 3,
+                value = instruksiValue,
+                onValueChange = {
+                    instruksiValue = it
+                    viewModel.onInstruksiChange(it.text)
+                },
+                placeholder = { Text("Gunakan toolbar di atas atau ketik manual (###, **, -)") },
+                supportingText = { Text("Membantu orang tua memahami langkah-langkah terapi.") },
+                minLines = 5,
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -193,6 +227,43 @@ fun CreateTaskScreen(
 
             Spacer(Modifier.height(16.dp))
         }
+    }
+}
+
+@Composable
+private fun FormattingToolbar(
+    onAction: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        ToolbarButton(Icons.Default.Title, "Header") { onAction("header") }
+        ToolbarButton(Icons.Default.FormatBold, "Bold") { onAction("bold") }
+        ToolbarButton(Icons.AutoMirrored.Filled.FormatListBulleted, "List") { onAction("list") }
+    }
+}
+
+private fun insertBlockTag(text: String, selection: TextRange, tag: String): Pair<String, TextRange> {
+    val before = text.substring(0, selection.start)
+    val after = text.substring(selection.end)
+
+    // Ensure it starts on a new line if not already
+    val needsLeadingNewline = before.isNotEmpty() && !before.endsWith("\n")
+    val actualTag = if (needsLeadingNewline) "\n$tag" else tag
+
+    val transformed = before + actualTag + after
+    return transformed to TextRange(selection.start + actualTag.length)
+}
+
+@Composable
+private fun ToolbarButton(icon: ImageVector, contentDescription: String, onClick: () -> Unit) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.size(36.dp),
+        colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Icon(icon, contentDescription = contentDescription, modifier = Modifier.size(20.dp))
     }
 }
 

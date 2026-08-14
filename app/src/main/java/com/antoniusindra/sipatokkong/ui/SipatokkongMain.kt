@@ -19,6 +19,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -28,16 +29,16 @@ import com.antoniusindra.sipatokkong.data.model.UserRole
 import com.antoniusindra.sipatokkong.ui.admin.CreateAccountScreen
 import com.antoniusindra.sipatokkong.ui.admin.CreateChildScreen
 import com.antoniusindra.sipatokkong.ui.auth.login.LoginScreen
-import com.antoniusindra.sipatokkong.ui.home.AdminHomeScreen
-import com.antoniusindra.sipatokkong.ui.home.ParentHomeScreen
-import com.antoniusindra.sipatokkong.ui.home.ParentHomeViewModel
 import com.antoniusindra.sipatokkong.ui.feedback.CreateFeedbackScreen
 import com.antoniusindra.sipatokkong.ui.feedback.FeedbackListScreen
 import com.antoniusindra.sipatokkong.ui.feedback.FeedbackThreadScreen
+import com.antoniusindra.sipatokkong.ui.home.AdminHomeScreen
+import com.antoniusindra.sipatokkong.ui.home.ParentHistoryScreen
+import com.antoniusindra.sipatokkong.ui.home.ParentHomeScreen
+import com.antoniusindra.sipatokkong.ui.home.ParentHomeViewModel
 import com.antoniusindra.sipatokkong.ui.notifications.ParentNotificationScreen
-import com.antoniusindra.sipatokkong.ui.volunteer.CreateTaskScreen
 import com.antoniusindra.sipatokkong.ui.task.TaskDetailScreen
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.antoniusindra.sipatokkong.ui.volunteer.CreateTaskScreen
 import kotlinx.coroutines.launch
 
 @Composable
@@ -147,7 +148,9 @@ fun SipatokkongMain() {
                             },
                             onOpenNotifications = { navController.navigate("parent_notifications") },
                             onOpenTask = { id -> navController.navigate("tugas_detail/$id") },
-                            onOpenFeedbackList = { navController.navigate("parent_feedback_list") },
+                            onOpenFeedbackThread = { id -> navController.navigate("feedback_thread/$id") },
+                            onComposeFeedback = { navController.navigate("create_feedback") },
+                            onSeeAllHistory = { navController.navigate("parent_history") },
                             tasks = parentState.tasks,
                             isLoadingTasks = parentState.isLoading,
                             childName = parentState.childName ?: "anak Anda",
@@ -156,6 +159,18 @@ fun SipatokkongMain() {
                 }
                 composable("parent_notifications") {
                     ParentNotificationScreen(onBack = { navController.popBackStack() })
+                }
+                composable("parent_history") {
+                    val signedInState = sessionState as? SessionManager.State.SignedIn
+                    if (signedInState != null) {
+                        val parentVm: ParentHomeViewModel = viewModel(factory = ParentHomeViewModel.Factory)
+                        val parentState by parentVm.uiState.collectAsState()
+                        ParentHistoryScreen(
+                            tasks = parentState.tasks,
+                            onBack = { navController.popBackStack() },
+                            onOpenTask = { id -> navController.navigate("tugas_detail/$id") }
+                        )
+                    }
                 }
                 composable("tugas_detail/{tugasId}") { backStackEntry ->
                     val id = backStackEntry.arguments?.getString("tugasId")
@@ -181,7 +196,6 @@ fun SipatokkongMain() {
                 composable("parent_feedback_list") {
                     FeedbackListScreen(
                         title = "Catatan & Feedback",
-                        onBack = { navController.popBackStack() },
                         onOpenThread = { id -> navController.navigate("feedback_thread/$id") },
                         onCompose = { navController.navigate("create_feedback") },
                     )
@@ -189,7 +203,6 @@ fun SipatokkongMain() {
                 composable("volunteer_feedback_list") {
                     FeedbackListScreen(
                         title = "Feedback Orang Tua",
-                        onBack = { navController.popBackStack() },
                         onOpenThread = { id -> navController.navigate("feedback_thread/$id") },
                     )
                 }

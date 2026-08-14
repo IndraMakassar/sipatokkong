@@ -11,6 +11,7 @@ data class Feedback(
     @SerialName("orangtua_id") val orangtuaId: String,
     @SerialName("catatan_perilaku") val catatanPerilaku: String? = null,
     val kendala: String? = null,
+    val mood: String? = null,
     val isi: String,
     val status: String,
     @SerialName("answered_at") val answeredAt: String? = null,
@@ -24,6 +25,7 @@ data class FeedbackInsert(
     @SerialName("orangtua_id") val orangtuaId: String,
     @SerialName("catatan_perilaku") val catatanPerilaku: String? = null,
     val kendala: String? = null,
+    val mood: String? = null,
     val isi: String,
 )
 
