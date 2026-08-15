@@ -17,6 +17,36 @@ We maintain a living document called `project_status.md` in the root directory. 
 
 Always refer to `project_status.md` before starting a new task to understand the current state and boundaries of the project.
 
+### Automated enforcement
+
+Two hooks in `.claude/` keep this document honest, so it cannot quietly drift:
+
+*   **`SessionStart`** injects `project_status.md` into the agent's context automatically at the
+    start of every session — no one has to remember to open it.
+*   **`Stop`** refuses to let the agent end its turn while any watched source file
+    (`app/src`, `supabase`, `gradle`, root Gradle scripts) is newer than `project_status.md`.
+
+Both are stdlib Python scripts: hook-capable machines here have neither `jq` nor PowerShell 7,
+and the commands are wrapped in `|| true` so a machine without `python` on PATH degrades to a
+no-op rather than blocking anyone's work.
+
+### Updating the Change Log
+
+Add the newest entry at the **top** of the Change Log. Never delete older entries.
+
+```markdown
+### [YYYY-MM-DD] - Short Title
+* **What changed:** files or areas touched, and why this approach was chosen
+* **Verified:** only what was actually run — build succeeded, tests passed, tried on device
+* **Not yet verified:** everything else, stated plainly
+```
+
+**Separate "verified" from "not yet verified" honestly.** This is the whole point of the
+document. "It compiles" is not "it works". If something has not been run, say so — a future
+session will otherwise assume it was, and build on a false premise.
+
+Write for a reader with no access to the conversation that produced the change.
+
 ## Coding Conventions
 
 ### Language & UI

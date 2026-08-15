@@ -38,6 +38,18 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 
 ## Change Log
 
+### [2026-08-15] - Status Document Automation
+* **What changed:** Added `.claude/settings.json` plus two stdlib-Python hooks. `SessionStart`
+    injects this document into the agent's context; `Stop` blocks the agent from ending a turn
+    while any watched source file is newer than this file. Rules documented in `agent.md`.
+* **Also:** Bumped Android Gradle Plugin `9.0.0-alpha06` → `9.0.1`. Kept out of the feature PRs
+    because build-infrastructure changes should not be buried inside a feature diff.
+* **Verified:** Both hook scripts exercised with synthetic payloads — normal case, blocked case,
+    and the `stop_hook_active` anti-loop guard. `assembleDebug` still green.
+* **Not yet verified:** Whether the hooks actually fire inside Claude Code. The settings watcher
+    only tracks directories that existed at session start, so `/hooks` must be opened once (or the
+    CLI restarted) before they take effect.
+
 ### [2026-08-09] - Profile Screen Redesign & Global Styling
 * **Profile Screen UX Overhaul:**
     *   Redesigned `ParentProfileScreen` header to match the `WeeklyProgressCard` aesthetic, featuring a `BrandTeal` gradient and subtle geometric decorations.
