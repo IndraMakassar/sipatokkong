@@ -6,7 +6,8 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 ## Status Summary
 
 ### ✅ Built / Completed
-*   **Infrastructure:** Supabase project setup, database schema (migrations), RLS policies, and storage bucket configurations.
+*   **Infrastructure:** Supabase project setup, database schema, RLS policies, and storage bucket
+    configurations. Migrations `0001` and `0002` are both applied to the live project.
 *   **Authentication:** Phone Number + PIN login flow mapped to Supabase Auth. Role-based routing (Admin, Parent, Volunteer).
 *   **Admin Features:**
     *   Create Parent/Volunteer accounts (via `noSessionClient` to preserve admin session).
@@ -29,12 +30,6 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 *   **Notifications:** Server-side triggers are defined, but real-time client-side handling and push notifications (FCM) are pending.
 *   **Presensi (Attendance):** Relawan vertical slice for logging home visits.
 
-### ⚠️ Pending Deployment Step
-*   **Migration `0002_recurring_tugas.sql` has NOT been run.** The recurring-program code is on
-    `master`, but until this migration is applied in Supabase the `occurrence_date` column does
-    not exist and **every attempt to mark a task done will fail** — including for ordinary
-    one-shot tasks, since completions now carry that column. Run it before any deploy or demo.
-
 ### ❌ Not Built / Deferred
 *   **Admin Dashboard:** Progress recaps for donors and attendance overviews.
 *   **Data Export:** Exporting progress reports to CSV/PDF.
@@ -47,6 +42,17 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 *   **Simple Access:** No email/password registration. Account creation is restricted to Admins; login is via Phone + PIN.
 
 ## Change Log
+
+### [2026-08-15] - Migration 0002 Applied
+* **What changed:** No code. `supabase/migrations/0002_recurring_tugas.sql` was run against the
+    live Supabase project, so `tugas_penyelesaian.occurrence_date` now exists and the unique
+    constraint is `(tugas_id, occurrence_date)`.
+* **Why it mattered:** Until this ran, marking *any* task done would fail — including ordinary
+    one-shot tasks, because completions now always send that column. That regression is cleared.
+* **Verified:** Reported applied by the maintainer. Not independently confirmed from this machine;
+    no query was run against the database.
+* **Remaining blocker:** `local.properties` still has no `SUPABASE_URL` / `SUPABASE_ANON_KEY`, so
+    nothing in the app has been exercised at runtime yet.
 
 ### [2026-08-15] - Merge Verification of PRs #10–#12
 * **What changed:** No code. PRs #10, #11 and #12 merged into `master` without git conflicts.
