@@ -30,6 +30,11 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 *   **Notifications:** Server-side triggers are defined, but real-time client-side handling and push notifications (FCM) are pending.
 *   **Presensi (Attendance):** Relawan vertical slice for logging home visits.
 
+### ⚠️ Pending Deployment Step
+*   **Migration `0003_kemandirian_durasi.sql` has NOT been run.** Once this branch merges, the
+    completion form sends `kemandirian` and `durasi` columns that do not exist yet, so **every
+    attempt to mark a task done will fail** until the migration is applied in Supabase.
+
 ### ❌ Not Built / Deferred
 *   **Admin Dashboard:** Progress recaps for donors and attendance overviews.
 *   **Data Export:** Exporting progress reports to CSV/PDF.
@@ -75,6 +80,29 @@ screen at the same time.
     carries its own `occurrence_date`, so no rule expansion and no date window are needed at all.
 
 ## Change Log
+
+### [2026-08-16] - Independence Scale + Working Duration on the Parent's Completion Form
+* **What changed:** The child-response question now measures **independence** (Mandiri / Dengan
+    Bantuan / Dengan Bantuan Penuh / Belum Bisa) instead of mood, and a new **duration** question
+    was added as time buckets rather than a minutes field — one tap, no number to estimate.
+* **Both are now real columns.** Migration `0003` adds `kemandirian` and `durasi` to
+    `tugas_penyelesaian`. Previously the answer was concatenated into `catatan` as
+    `"Respon anak: ...."`, so it could never be counted or charted. `catatan` now holds only what
+    the parent actually typed.
+* **No backfill, on purpose.** The old values measured mood, the new ones measure independence —
+    they are different dimensions. Legacy rows keep their text in `catatan` and leave both new
+    columns NULL; inventing a mapping would fabricate data nobody collected.
+* **Layout:** four options no longer fit across one phone-width row, so the cards became a 2×2
+    grid. The volunteer's demo media at the top of the screen is now labelled "Media Ajar".
+* **Deliberately not built:** the requested "kolom media ajar" beyond that label. The request came
+    from a teammate and nobody on hand could say what it meant, so building a column or a second
+    upload flow risked expensive rework. Needs clarification before anything more is added.
+* **Verified:** `assembleDebug` green; 23 unit tests pass, including a new `CompletionEnumTest`
+    that parses `0003_*.sql` and asserts every Kotlin `dbValue` matches its Postgres enum label in
+    exact order. That test was also run against a deliberately typo'd value and **failed** as
+    intended — a one-character drift now breaks the build instead of failing an insert after a
+    parent has filled in the form.
+* **Not yet verified:** all runtime behaviour, and the migration has not been applied.
 
 ### [2026-08-16] - Documented Task Visibility Rules + 30-Day History Cap
 * **What changed:** No code. Added a **Product Rules** section spelling out exactly when a finished
