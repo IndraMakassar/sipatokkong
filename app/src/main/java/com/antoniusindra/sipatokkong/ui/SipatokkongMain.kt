@@ -39,7 +39,9 @@ import com.antoniusindra.sipatokkong.ui.home.ParentHomeViewModel
 import com.antoniusindra.sipatokkong.ui.notifications.ParentNotificationScreen
 import com.antoniusindra.sipatokkong.ui.task.TaskDetailScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.CreateTaskScreen
+import com.antoniusindra.sipatokkong.ui.volunteer.ProgramListScreen
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 @Composable
 fun SipatokkongMain() {
@@ -147,11 +149,16 @@ fun SipatokkongMain() {
                                 }
                             },
                             onOpenNotifications = { navController.navigate("parent_notifications") },
-                            onOpenTask = { id -> navController.navigate("tugas_detail/$id") },
+                            onOpenTask = { id, date ->
+                                navController.navigate("tugas_detail/$id/$date")
+                            },
                             onOpenFeedbackThread = { id -> navController.navigate("feedback_thread/$id") },
                             onComposeFeedback = { navController.navigate("create_feedback") },
                             onSeeAllHistory = { navController.navigate("parent_history") },
-                            tasks = parentState.tasks,
+                            occurrencesByDate = parentState.upcomingByDate,
+                            weekDone = parentState.weekDone,
+                            weekTotal = parentState.weekTotal,
+                            today = parentState.today,
                             isLoadingTasks = parentState.isLoading,
                             childName = parentState.childName ?: "anak Anda",
                         )
@@ -166,16 +173,25 @@ fun SipatokkongMain() {
                         val parentVm: ParentHomeViewModel = viewModel(factory = ParentHomeViewModel.Factory)
                         val parentState by parentVm.uiState.collectAsState()
                         ParentHistoryScreen(
-                            tasks = parentState.tasks,
+                            history = parentState.history,
+                            today = parentState.today,
                             onBack = { navController.popBackStack() },
-                            onOpenTask = { id -> navController.navigate("tugas_detail/$id") }
+                            onOpenTask = { id, date ->
+                                navController.navigate("tugas_detail/$id/$date")
+                            }
                         )
                     }
                 }
-                composable("tugas_detail/{tugasId}") { backStackEntry ->
+                composable("tugas_detail/{tugasId}/{occurrenceDate}") { backStackEntry ->
                     val id = backStackEntry.arguments?.getString("tugasId")
-                    if (id != null) {
-                        TaskDetailScreen(tugasId = id, onBack = { navController.popBackStack() })
+                    val date = backStackEntry.arguments?.getString("occurrenceDate")
+                        ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+                    if (id != null && date != null) {
+                        TaskDetailScreen(
+                            tugasId = id,
+                            occurrenceDate = date,
+                            onBack = { navController.popBackStack() },
+                        )
                     }
                 }
                 composable("create_orangtua") {
@@ -226,6 +242,10 @@ fun SipatokkongMain() {
                                     Text("Buat Program Ajar")
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
+                                Button(onClick = { navController.navigate("volunteer_programs") }) {
+                                    Text("Program Ajar Saya")
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
                                 Button(onClick = { navController.navigate("volunteer_feedback_list") }) {
                                     Text("Feedback Orang Tua")
                                 }
@@ -240,6 +260,9 @@ fun SipatokkongMain() {
                             }
                         }
                     }
+                }
+                composable("volunteer_programs") {
+                    ProgramListScreen(onBack = { navController.popBackStack() })
                 }
                 composable("create_program_ajar") {
                     CreateTaskScreen(onBack = { navController.popBackStack() })

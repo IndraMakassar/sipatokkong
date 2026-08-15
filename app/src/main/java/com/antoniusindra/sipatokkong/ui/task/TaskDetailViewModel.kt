@@ -13,7 +13,9 @@ import com.antoniusindra.sipatokkong.data.model.DocumentationInsert
 import com.antoniusindra.sipatokkong.data.model.MediaKind
 import com.antoniusindra.sipatokkong.data.model.Task
 import com.antoniusindra.sipatokkong.data.model.TaskCompletionInsert
+import com.antoniusindra.sipatokkong.data.model.TaskOccurrences
 import com.antoniusindra.sipatokkong.data.repository.TaskRepository
+import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,8 +27,12 @@ import kotlinx.coroutines.withContext
 data class TaskDetailUiState(
     val isLoading: Boolean = true,
     val tugas: Task? = null,
+    /** Which due date of the task is being worked on. */
+    val occurrenceDate: LocalDate? = null,
     val mediaUrl: String? = null,
     val loadError: String? = null,
+    /** True when this specific date has already been completed. */
+    val alreadyDone: Boolean = false,
     // completion form
     val response: ChildResponse? = null,
     val catatan: String = "",
@@ -35,9 +41,7 @@ data class TaskDetailUiState(
     val isSubmitting: Boolean = false,
     val isSuccess: Boolean = false,
     val submitError: String? = null,
-) {
-    val alreadyDone: Boolean get() = tugas?.status == "done"
-}
+)
 
 class TaskDetailViewModel(
     private val taskRepository: TaskRepository,
@@ -50,7 +54,7 @@ class TaskDetailViewModel(
     private var proofExt: String? = null
     private var loaded = false
 
-    fun load(id: String) {
+    fun load(id: String, occurrenceDate: LocalDate) {
         if (loaded) return
         loaded = true
         viewModelScope.launch {
@@ -58,9 +62,23 @@ class TaskDetailViewModel(
             runCatching {
                 val tugas = taskRepository.getTask(id) ?: error("Tugas tidak ditemukan.")
                 val url = runCatching { taskRepository.signedDemoUrl(tugas.mediaPath) }.getOrNull()
-                tugas to url
-            }.onSuccess { (tugas, url) ->
-                _uiState.update { it.copy(isLoading = false, tugas = tugas, mediaUrl = url) }
+                // Completion is per date, so a recurring program stays open on other days.
+                val done = TaskOccurrences.isDone(
+                    completions = taskRepository.completionsForCurrentUser(),
+                    taskId = id,
+                    date = occurrenceDate,
+                )
+                Triple(tugas, url, done)
+            }.onSuccess { (tugas, url, done) ->
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        tugas = tugas,
+                        mediaUrl = url,
+                        occurrenceDate = occurrenceDate,
+                        alreadyDone = done,
+                    )
+                }
             }.onFailure { e ->
                 _uiState.update { it.copy(isLoading = false, loadError = e.message ?: "Gagal memuat tugas") }
             }
@@ -88,6 +106,7 @@ class TaskDetailViewModel(
     fun submit() {
         val s = _uiState.value
         val tugas = s.tugas ?: return
+        val occurrenceDate = s.occurrenceDate ?: return
         val orangtuaId = (sessionManager.state.value as? SessionManager.State.SignedIn)?.profile?.id
         if (s.proofUri == null || s.proofKind == null || proofExt == null) {
             _uiState.update { it.copy(submitError = "Pilih foto/video bukti terlebih dahulu.") }
@@ -132,6 +151,7 @@ class TaskDetailViewModel(
                     TaskCompletionInsert(
                         tugasId = tugas.id,
                         orangtuaId = orangtuaId,
+                        occurrenceDate = occurrenceDate.toString(),
                         dokumentasiId = dokumentasiId,
                         catatan = note,
                     )

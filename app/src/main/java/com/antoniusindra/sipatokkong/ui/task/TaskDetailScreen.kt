@@ -56,18 +56,25 @@ import com.antoniusindra.sipatokkong.data.model.MediaKind
 import com.antoniusindra.sipatokkong.ui.components.RichTextDisplay
 import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
 import com.antoniusindra.sipatokkong.ui.theme.MutedText
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+private val DetailDateFormat =
+    DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy", Locale.forLanguageTag("id-ID"))
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskDetailScreen(
     tugasId: String,
+    occurrenceDate: LocalDate,
     onBack: () -> Unit,
     viewModel: TaskDetailViewModel = viewModel(factory = TaskDetailViewModel.Factory),
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    LaunchedEffect(tugasId) { viewModel.load(tugasId) }
+    LaunchedEffect(tugasId, occurrenceDate) { viewModel.load(tugasId, occurrenceDate) }
     LaunchedEffect(ui.isSuccess) {
         if (ui.isSuccess) {
             Toast.makeText(context, "Bukti terkirim, tugas ditandai selesai!", Toast.LENGTH_SHORT).show()
@@ -161,7 +168,8 @@ private fun DetailBody(
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "⏱ Prioritas ${priorityLabel(tugas.priorityLevel)}" +
-                        (tugas.deadline?.let { " • Deadline $it" } ?: ""),
+                        (ui.occurrenceDate?.let { " • Jadwal ${it.format(DetailDateFormat)}" } ?: "") +
+                        (if (tugas.isRecurring) " • ${tugas.toRecurrenceRule().describe()}" else ""),
                     color = BrandTeal,
                     fontWeight = FontWeight.SemiBold,
                     style = MaterialTheme.typography.bodyMedium,
@@ -173,7 +181,14 @@ private fun DetailBody(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = BrandTeal)
                 Spacer(Modifier.size(8.dp))
-                Text("Tugas ini sudah ditandai selesai.", fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (tugas.isRecurring) {
+                        "Jadwal ini sudah ditandai selesai. Jadwal berikutnya tetap perlu dikerjakan."
+                    } else {
+                        "Tugas ini sudah ditandai selesai."
+                    },
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
         } else {
             // Response selector

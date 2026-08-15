@@ -61,8 +61,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import com.antoniusindra.sipatokkong.core.recurrence.RecurrenceType
+import com.antoniusindra.sipatokkong.core.recurrence.labelId
 import com.antoniusindra.sipatokkong.data.model.MediaKind
 import com.antoniusindra.sipatokkong.data.model.TaskPriority
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -189,12 +194,85 @@ fun CreateTaskScreen(
                 }
             }
 
-            // ---- Deadline ----
-            SectionLabel("Deadline (opsional)")
-            DeadlineField(
-                deadline = ui.deadline,
-                onPick = viewModel::onDeadlineChange,
-            )
+            // ---- Pola pengulangan ----
+            SectionLabel("Pola Pengulangan")
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                RecurrenceType.entries.chunked(3).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { type ->
+                            FilterChip(
+                                selected = ui.recurrence == type,
+                                onClick = { viewModel.onRecurrenceChange(type) },
+                                label = { Text(type.label) },
+                            )
+                        }
+                    }
+                }
+            }
+
+            when (ui.recurrence) {
+                RecurrenceType.WEEKLY -> {
+                    SectionLabel("Hari dalam Seminggu*")
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        DayOfWeek.entries.chunked(4).forEach { row ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                row.forEach { day ->
+                                    FilterChip(
+                                        selected = day in ui.daysOfWeek,
+                                        onClick = { viewModel.onDayOfWeekToggle(day) },
+                                        label = { Text(day.labelId.take(3)) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                RecurrenceType.MONTHLY -> OutlinedTextField(
+                    value = ui.dayOfMonth,
+                    onValueChange = viewModel::onDayOfMonthChange,
+                    label = { Text("Tanggal dalam Bulan (1-31)*") },
+                    supportingText = {
+                        Text("Bulan yang lebih pendek otomatis memakai hari terakhirnya.")
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                RecurrenceType.INTERVAL -> OutlinedTextField(
+                    value = ui.intervalDays,
+                    onValueChange = viewModel::onIntervalChange,
+                    label = { Text("Ulangi Tiap Berapa Hari*") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                else -> Unit
+            }
+
+            if (ui.isRecurring) {
+                SectionLabel("Tanggal Mulai*")
+                DeadlineField(
+                    deadline = ui.startsOn,
+                    onPick = viewModel::onStartsOnChange,
+                    label = "Tanggal Mulai",
+                )
+                SectionLabel("Tanggal Selesai*")
+                DeadlineField(
+                    deadline = ui.endsOn,
+                    onPick = viewModel::onEndsOnChange,
+                    label = "Tanggal Selesai",
+                )
+            } else {
+                // ---- Deadline (hanya untuk tugas sekali jalan) ----
+                SectionLabel("Deadline (opsional)")
+                DeadlineField(
+                    deadline = ui.deadline,
+                    onPick = viewModel::onDeadlineChange,
+                )
+            }
 
             if (ui.error != null) {
                 Text(
@@ -371,16 +449,17 @@ private fun MediaPickerBox(
 private fun DeadlineField(
     deadline: LocalDate?,
     onPick: (LocalDate?) -> Unit,
+    label: String = "Deadline",
 ) {
     var showPicker by remember { mutableStateOf(false) }
-    val label = deadline?.format(DateTimeFormatter.ofPattern("dd MMM yyyy")) ?: "Pilih tanggal"
+    val display = deadline?.format(DateTimeFormatter.ofPattern("dd MMM yyyy")) ?: "Pilih tanggal"
 
     OutlinedTextField(
-        value = label,
+        value = display,
         onValueChange = {},
         readOnly = true,
         enabled = false,
-        label = { Text("Deadline") },
+        label = { Text(label) },
         trailingIcon = { Icon(Icons.Filled.CalendarMonth, contentDescription = null) },
         modifier = Modifier
             .fillMaxWidth()
@@ -388,7 +467,13 @@ private fun DeadlineField(
     )
 
     if (showPicker) {
-        val state = rememberDatePickerState()
+        // Seeded with the current value so re-opening starts on the chosen date.
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = deadline
+                ?.atStartOfDay(ZoneOffset.UTC)
+                ?.toInstant()
+                ?.toEpochMilli(),
+        )
         DatePickerDialog(
             onDismissRequest = { showPicker = false },
             confirmButton = {
