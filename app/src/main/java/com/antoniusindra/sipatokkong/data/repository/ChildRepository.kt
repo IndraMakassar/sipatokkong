@@ -1,8 +1,11 @@
 package com.antoniusindra.sipatokkong.data.repository
 
+import com.antoniusindra.sipatokkong.data.model.Child
 import com.antoniusindra.sipatokkong.data.model.ChildInsert
 import com.antoniusindra.sipatokkong.data.model.ChildOption
+import com.antoniusindra.sipatokkong.data.model.ChildUpdate
 import com.antoniusindra.sipatokkong.data.model.ChildVolunteerInsert
+import com.antoniusindra.sipatokkong.data.model.ChildVolunteerRow
 import com.antoniusindra.sipatokkong.data.model.InsertedId
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
@@ -54,5 +57,49 @@ class ChildRepository(private val client: SupabaseClient) {
     suspend fun assignVolunteer(anakId: String, relawanId: String) {
         client.postgrest.from("anak_relawan")
             .insert(ChildVolunteerInsert(anakId = anakId, relawanId = relawanId))
+    }
+
+    /**
+     * Admin: every child, active or not, for the manage screen.
+     * RLS `anak_select` already narrows this to admins (others only see their own children).
+     */
+    suspend fun allChildren(): List<Child> =
+        client.postgrest.from("anak")
+            .select()
+            .decodeList<Child>()
+            .sortedBy { it.nama.lowercase() }
+
+    /** A single child by id. */
+    suspend fun getChild(id: String): Child? =
+        client.postgrest.from("anak")
+            .select {
+                filter { eq("id", id) }
+            }
+            .decodeSingleOrNull<Child>()
+
+    /** Admin-only: update a child row. */
+    suspend fun updateChild(id: String, update: ChildUpdate) {
+        client.postgrest.from("anak").update(update) {
+            filter { eq("id", id) }
+        }
+    }
+
+    /** Ids of the volunteers currently assigned to a child. */
+    suspend fun assignedVolunteerIds(anakId: String): List<String> =
+        client.postgrest.from("anak_relawan")
+            .select(columns = Columns.list("relawan_id")) {
+                filter { eq("anak_id", anakId) }
+            }
+            .decodeList<ChildVolunteerRow>()
+            .map { it.relawanId }
+
+    /** Admin-only: remove a volunteer assignment. */
+    suspend fun unassignVolunteer(anakId: String, relawanId: String) {
+        client.postgrest.from("anak_relawan").delete {
+            filter {
+                eq("anak_id", anakId)
+                eq("relawan_id", relawanId)
+            }
+        }
     }
 }

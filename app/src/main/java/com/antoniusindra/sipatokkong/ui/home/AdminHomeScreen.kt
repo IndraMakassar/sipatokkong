@@ -8,10 +8,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.ChildCare
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GroupAdd
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.ManageAccounts
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -39,6 +44,9 @@ fun AdminHomeScreen(
     onCreateOrangtua: () -> Unit,
     onCreateRelawan: () -> Unit,
     onCreateAnak: () -> Unit,
+    onManageOrangtua: () -> Unit,
+    onManageRelawan: () -> Unit,
+    onManageAnak: () -> Unit,
     onLogout: () -> Unit
 ) {
     Scaffold(
@@ -62,6 +70,7 @@ fun AdminHomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -104,6 +113,44 @@ fun AdminHomeScreen(
                 icon = Icons.Default.ChildCare,
                 onClick = onCreateAnak
             )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Text(
+                text = "Kelola Data",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.align(Alignment.Start)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            AdminActionCard(
+                title = "Kelola Akun Orangtua",
+                description = "Lihat, ubah, atau nonaktifkan akun orangtua.",
+                icon = Icons.Default.ManageAccounts,
+                onClick = onManageOrangtua
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            AdminActionCard(
+                title = "Kelola Akun Relawan",
+                description = "Lihat, ubah, atau nonaktifkan akun relawan.",
+                icon = Icons.Default.Groups,
+                onClick = onManageRelawan
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            AdminActionCard(
+                title = "Kelola Data Anak",
+                description = "Ubah data anak, pindah orang tua & atur relawan.",
+                icon = Icons.Default.Edit,
+                onClick = onManageAnak
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

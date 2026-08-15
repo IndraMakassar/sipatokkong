@@ -8,13 +8,32 @@ import io.github.jan.supabase.postgrest.query.Columns
 
 class ProfileRepository(private val client: SupabaseClient) {
 
-    /** All profiles of a given role (id + name). Admin can read all per RLS `can_view_profile`. */
+    /**
+     * Active profiles of a given role (id + name), for pickers.
+     * Deactivated accounts are excluded so they can no longer be assigned to new records.
+     * Admin can read all per RLS `can_view_profile`.
+     */
     suspend fun profilesByRole(role: String): List<ProfileOption> =
         client.postgrest.from("profiles")
             .select(columns = Columns.list("id", "full_name")) {
-                filter { eq("role", role) }
+                filter {
+                    eq("role", role)
+                    eq("is_active", true)
+                }
             }
             .decodeList<ProfileOption>()
+
+    /**
+     * Every profile of a given role with all columns, active or not — for the admin
+     * manage screens, which must also surface deactivated accounts so they can be restored.
+     */
+    suspend fun profilesByRoleFull(role: String): List<Profile> =
+        client.postgrest.from("profiles")
+            .select {
+                filter { eq("role", role) }
+            }
+            .decodeList<Profile>()
+            .sortedBy { it.fullName.lowercase() }
 
     suspend fun createProfile(profile: Profile) {
         client.postgrest.from("profiles").insert(profile)
