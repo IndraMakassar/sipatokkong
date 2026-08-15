@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/session_start.py 2>/dev/null || true",
+            "timeout": 15,
+            "statusMessage": "Membaca progress.md..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/stop_gate.py 2>/dev/null || true",
+            "timeout": 15,
+            "statusMessage": "Mengecek progress.md..."
+          }
+        ]
+      }
+    ]
+  }
+}
