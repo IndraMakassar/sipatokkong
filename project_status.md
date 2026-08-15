@@ -41,7 +41,52 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 *   **Low Bandwidth:** Data frugality is a hard requirement. Media must be compressed before upload.
 *   **Simple Access:** No email/password registration. Account creation is restricted to Admins; login is via Phone + PIN.
 
+## Product Rules
+
+### When a task leaves the parent's home screen
+
+Defined by `visible` in `ui/home/ParentHomeViewModel.kt`:
+
+| Occurrence | On the home list? |
+|---|---|
+| Today or later, **not** done | Yes |
+| Today or later, **done** | Yes — dimmed, title struck through, "Selesai" chip |
+| Past date, **not** done | Yes — shown as "Terlambat" |
+| Past date, **done** | No — history screen only |
+
+So a task finished today stays on the home screen for the rest of that day as proof of work, and
+drops off once its date is in the past. That transition happens the next time the home screen
+loads on a new calendar day — there is no timer forcing a refresh at midnight.
+
+Deliberate side effect: a task completed today appears on **both** the home screen and the history
+screen at the same time.
+
+## Known Limitations
+
+*   **The history screen only covers the last 30 days.** `history` is derived from the same
+    `occurrences` list as the home screen, and that list is only built for
+    `today − PAST_WINDOW_DAYS (30)` through `today + FUTURE_WINDOW_DAYS (14)` in
+    `ParentHomeViewModel.refresh()`. Completions older than 30 days are not visible anywhere in
+    the app, despite the screen being called "Riwayat".
+
+    Kept on purpose for now — 30 days covers current needs. If it ever needs lifting (donor
+    reporting is the likely trigger), the clean fix is to build history straight from the
+    `tugas_penyelesaian` table instead of from expanded recurrence rules: every row already
+    carries its own `occurrence_date`, so no rule expansion and no date window are needed at all.
+
 ## Change Log
+
+### [2026-08-16] - Documented Task Visibility Rules + 30-Day History Cap
+* **What changed:** No code. Added a **Product Rules** section spelling out exactly when a finished
+    task leaves the parent's home screen, and a **Known Limitations** section.
+* **Why:** The rule only existed inside `ParentHomeViewModel.visible` and had to be re-derived by
+    reading code every time it was questioned.
+* **Limitation recorded:** the history screen silently covers only the last 30 days, because it
+    reuses the home screen's occurrence window (`PAST_WINDOW_DAYS`). Older completions are not
+    visible anywhere. **Left as-is on purpose** — written down precisely because it is a decision
+    rather than an oversight, along with the fix to reach for if donor reporting ever needs it.
+* **Verified:** Constants re-read from source before documenting (`PAST_WINDOW_DAYS = 30`,
+    `FUTURE_WINDOW_DAYS = 14`), so the numbers in this document match the code.
 
 ### [2026-08-16] - Fix: Home Never Reloaded After Completing a Task
 * **The bug:** Marking a task done saved correctly, but the card on the parent home did not change
