@@ -43,6 +43,24 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 
 ## Change Log
 
+### [2026-08-15] - First Runtime Smoke Test
+* **What changed:** No code. Credentials landed in `local.properties`, so the app was built,
+    installed and exercised on an emulator (Pixel 9, API 36) for the first time this cycle.
+* **Verified (runtime):**
+    *   Supabase connectivity is real — a persisted session was restored and the profile fetched
+        from the database (signed in as *Relawan Kevin*, role RELAWAN).
+    *   The merge of PR #10/#11 holds up at runtime, not just at compile time: `CreateTaskScreen`
+        shows master's rich-text toolbar **and** the new "Pola Pengulangan" section together.
+    *   Recurrence form logic: selecting *Mingguan* reveals the seven day chips and swaps
+        "Deadline" for "Tanggal Mulai/Selesai"; the start date auto-fills to today.
+    *   `ProgramListScreen` loads and its query succeeds (empty state, not an error state).
+* **Not yet verified — no database WRITE has been exercised at all:** creating a program,
+    completing an occurrence, and every admin edit screen. Migration `0002` therefore still has
+    no runtime confirmation either, since nothing has attempted to write `occurrence_date`.
+* **Blocker found:** the signed-in volunteer has **no child assigned** ("Belum ada anak yang
+    ditugaskan"), and demo media is mandatory, so no task can be created from this account. Assign
+    a child to that volunteer via Admin → Kelola Data Anak before end-to-end testing.
+
 ### [2026-08-15] - Migration 0002 Applied
 * **What changed:** No code. `supabase/migrations/0002_recurring_tugas.sql` was run against the
     live Supabase project, so `tugas_penyelesaian.occurrence_date` now exists and the unique
