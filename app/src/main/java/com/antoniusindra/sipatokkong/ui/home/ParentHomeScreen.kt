@@ -50,7 +50,9 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -326,8 +328,10 @@ private fun SectionHeader(onSeeAllClick: () -> Unit) {
             fontWeight = FontWeight.Bold,
             modifier = Modifier.weight(1f)
         )
+        // Labelled "Riwayat", not "Lihat Semua": the destination only lists finished
+        // occurrences, so the old label promised more than it delivered.
         Text(
-            "Lihat Semua",
+            "Riwayat",
             color = BrandTeal,
             fontWeight = FontWeight.SemiBold,
             style = MaterialTheme.typography.bodyMedium,
@@ -340,12 +344,18 @@ private fun SectionHeader(onSeeAllClick: () -> Unit) {
 internal fun TaskCard(occurrence: TaskOccurrence, today: LocalDate, onClick: () -> Unit) {
     val task = occurrence.task
     val style = occurrenceStyle(occurrence, today)
+    // A finished occurrence stays on the list as proof of work, but recedes visually so the
+    // eye lands on what still needs doing.
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(if (occurrence.isDone) 0.6f else 1f),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (occurrence.isDone) 0.dp else 2.dp
+        )
     ) {
         Column(
             modifier = Modifier
@@ -376,6 +386,7 @@ internal fun TaskCard(occurrence: TaskOccurrence, today: LocalDate, onClick: () 
                     task.judul,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
+                    textDecoration = if (occurrence.isDone) TextDecoration.LineThrough else null,
                     modifier = Modifier.weight(1f)
                 )
 
@@ -486,7 +497,8 @@ private fun ParentHomeScreenPreview() {
             occurrencesByDate = listOf(
                 today to listOf(
                     TaskOccurrence(sensori, today, isDone = false),
-                    TaskOccurrence(bicara, today, isDone = false),
+                    // Finished one, so the dimmed + struck-through styling is visible here too.
+                    TaskOccurrence(bicara, today, isDone = true),
                 ),
                 today.plusDays(3) to listOf(
                     TaskOccurrence(bicara, today.plusDays(3), isDone = false),

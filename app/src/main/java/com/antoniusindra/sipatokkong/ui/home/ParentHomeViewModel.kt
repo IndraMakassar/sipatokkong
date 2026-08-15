@@ -27,13 +27,19 @@ data class ParentHomeUiState(
     val isLoading: Boolean = true,
     val error: String? = null,
 ) {
-    /** Still to do: overdue occurrences plus everything from today onward. */
-    val upcoming: List<TaskOccurrence>
-        get() = occurrences.filter { !it.isDone }
+    /**
+     * What the home screen shows.
+     *
+     * Today and later always appear — including finished ones, so a parent can still see what
+     * they got done today instead of the card silently vanishing. Past dates only appear while
+     * still unfinished (i.e. overdue); once done they belong to the history screen.
+     */
+    val visible: List<TaskOccurrence>
+        get() = occurrences.filter { it.date >= today || !it.isDone }
 
     /** Grouped by due date, ascending — how the home screen renders them. */
-    val upcomingByDate: List<Pair<LocalDate, List<TaskOccurrence>>>
-        get() = upcoming.groupBy { it.date }.toList().sortedBy { it.first }
+    val visibleByDate: List<Pair<LocalDate, List<TaskOccurrence>>>
+        get() = visible.groupBy { it.date }.toList().sortedBy { it.first }
 
     /** Completed occurrences, most recent first, for the Riwayat tab. */
     val history: List<TaskOccurrence>
@@ -64,9 +70,9 @@ class ParentHomeViewModel(
     private val _uiState = MutableStateFlow(ParentHomeUiState())
     val uiState: StateFlow<ParentHomeUiState> = _uiState.asStateFlow()
 
-    init {
-        refresh()
-    }
+    // No init { refresh() } on purpose: the screen drives loading via LaunchedEffect so the list
+    // also reloads when the user returns from the task detail screen. Loading here as well would
+    // mean two network round-trips on every entry — costly for a deliberately data-frugal app.
 
     fun refresh() {
         viewModelScope.launch {

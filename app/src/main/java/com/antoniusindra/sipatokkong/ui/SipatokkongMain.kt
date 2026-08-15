@@ -148,6 +148,9 @@ fun SipatokkongMain() {
                     if (signedInState != null) {
                         val parentVm: ParentHomeViewModel = viewModel(factory = ParentHomeViewModel.Factory)
                         val parentState by parentVm.uiState.collectAsState()
+                        // Re-runs when this destination re-enters composition after popping back
+                        // from the task detail screen, so a just-completed task updates at once.
+                        LaunchedEffect(Unit) { parentVm.refresh() }
                         ParentHomeScreen(
                             profile = signedInState.profile,
                             onLogout = {
@@ -162,7 +165,7 @@ fun SipatokkongMain() {
                             onOpenFeedbackThread = { id -> navController.navigate("feedback_thread/$id") },
                             onComposeFeedback = { navController.navigate("create_feedback") },
                             onSeeAllHistory = { navController.navigate("parent_history") },
-                            occurrencesByDate = parentState.upcomingByDate,
+                            occurrencesByDate = parentState.visibleByDate,
                             weekDone = parentState.weekDone,
                             weekTotal = parentState.weekTotal,
                             today = parentState.today,
@@ -179,6 +182,7 @@ fun SipatokkongMain() {
                     if (signedInState != null) {
                         val parentVm: ParentHomeViewModel = viewModel(factory = ParentHomeViewModel.Factory)
                         val parentState by parentVm.uiState.collectAsState()
+                        LaunchedEffect(Unit) { parentVm.refresh() }
                         ParentHistoryScreen(
                             history = parentState.history,
                             today = parentState.today,

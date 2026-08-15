@@ -43,6 +43,28 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 
 ## Change Log
 
+### [2026-08-16] - Fix: Home Never Reloaded After Completing a Task
+* **The bug:** Marking a task done saved correctly, but the card on the parent home did not change
+    at all. Root cause was stale data, not styling: `ParentHomeViewModel` only loaded in `init`,
+    and its instance is scoped to the `orangtua_home` back-stack entry, which survives navigation
+    to the detail screen. Returning from the detail screen reused the same instance with the old
+    list, so the completion was invisible until the app was restarted.
+* **Fix:** Dropped `init { refresh() }` and drive loading from the screen with
+    `LaunchedEffect(Unit) { parentVm.refresh() }` on both `orangtua_home` and `parent_history` —
+    the same pattern the admin manage screens use. Loading in both places would have meant two
+    network round-trips per entry, which this data-frugal app should not pay.
+* **Behaviour change:** A finished occurrence now **stays visible** on the home list instead of
+    disappearing, rendered dimmed with a struck-through title and a "Selesai" chip. Past dates
+    still drop off once done; they live in the history screen.
+* **Also:** The "Lihat Semua" link is now labelled "Riwayat". It has always led to a
+    completed-only screen, so the old label promised a full list it never showed — which is why
+    it looked empty. Carried over from PR #9 and missed during the merge.
+* **Verified:** `assembleDebug` and `testDebugUnitTest` green (16 `RecurrenceTest` still pass);
+    installed on the emulator and the app launches with no fatal exception.
+* **Not yet verified:** The fix itself. Confirming it needs a **parent account with tasks** —
+    complete a task and watch the card change without restarting. No parent credentials are
+    available from this machine.
+
 ### [2026-08-15] - First Runtime Smoke Test
 * **What changed:** No code. Credentials landed in `local.properties`, so the app was built,
     installed and exercised on an emulator (Pixel 9, API 36) for the first time this cycle.
