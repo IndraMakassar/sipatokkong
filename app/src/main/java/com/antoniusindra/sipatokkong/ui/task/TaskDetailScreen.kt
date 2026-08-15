@@ -28,6 +28,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +54,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.antoniusindra.sipatokkong.data.model.ChildResponse
 import com.antoniusindra.sipatokkong.data.model.MediaKind
+import com.antoniusindra.sipatokkong.data.model.WorkDuration
 import com.antoniusindra.sipatokkong.ui.components.RichTextDisplay
 import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
 import com.antoniusindra.sipatokkong.ui.theme.MutedText
@@ -132,6 +134,7 @@ fun TaskDetailScreen(
                 modifier = Modifier.padding(innerPadding),
                 ui = ui,
                 onResponse = viewModel::onResponseChange,
+                onDuration = viewModel::onDurationChange,
                 onCatatan = viewModel::onCatatanChange,
             )
         }
@@ -143,6 +146,7 @@ private fun DetailBody(
     modifier: Modifier,
     ui: TaskDetailUiState,
     onResponse: (ChildResponse) -> Unit,
+    onDuration: (WorkDuration) -> Unit,
     onCatatan: (String) -> Unit,
 ) {
     val tugas = ui.tugas!!
@@ -153,6 +157,8 @@ private fun DetailBody(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Labelled so the parent knows this is the volunteer's demonstration, not their own upload.
+        Text("Media Ajar", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         MediaHero(mediaUrl = ui.mediaUrl, isVideo = tugas.mediaKind == "video")
 
         // Info card
@@ -191,16 +197,40 @@ private fun DetailBody(
                 )
             }
         } else {
-            // Response selector
-            Text("Bagaimana respon anak saat latihan ini?", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                ChildResponse.entries.forEach { r ->
-                    ResponseCard(
-                        response = r,
-                        selected = ui.response == r,
-                        onClick = { onResponse(r) },
-                        modifier = Modifier.weight(1f),
-                    )
+            // Independence selector — 2x2 grid, because four cards with labels as long as
+            // "Dengan Bantuan Penuh" do not fit across a single phone-width row.
+            Text("Seberapa mandiri anak mengerjakan ini?", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                ChildResponse.entries.chunked(2).forEach { row ->
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        row.forEach { r ->
+                            ResponseCard(
+                                response = r,
+                                selected = ui.response == r,
+                                onClick = { onResponse(r) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Duration
+            Text("Berapa lama dikerjakan?", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                WorkDuration.entries.chunked(2).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { d ->
+                            FilterChip(
+                                selected = ui.duration == d,
+                                onClick = { onDuration(d) },
+                                label = { Text(d.label) },
+                            )
+                        }
+                    }
                 }
             }
 

@@ -3,11 +3,32 @@ package com.antoniusindra.sipatokkong.data.model
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/** How the child responded during the exercise (stored inside the completion note). */
-enum class ChildResponse(val label: String, val emoji: String) {
-    SENANG("Senang & Fokus", "😊"),
-    BIASA("Biasa Saja", "😐"),
-    KEWALAHAN("Kewalahan", "😭"),
+/**
+ * How independently the child managed the exercise — mapped to the Postgres enum
+ * `tingkat_kemandirian`. Declared best-to-least independent; that order drives the on-screen grid.
+ *
+ * Emoji are kept because the target users are low-literacy parents: a picture reads faster than a
+ * phrase. "Belum Bisa" uses a seedling rather than a cross — this is a therapy tool, not a report
+ * card, and a child who cannot do something yet is still growing.
+ */
+enum class ChildResponse(val dbValue: String, val label: String, val emoji: String) {
+    MANDIRI("mandiri", "Mandiri", "💪"),
+    DENGAN_BANTUAN("dengan_bantuan", "Dengan Bantuan", "🤝"),
+    BANTUAN_PENUH("bantuan_penuh", "Dengan Bantuan Penuh", "🤲"),
+    BELUM_BISA("belum_bisa", "Belum Bisa", "🌱"),
+}
+
+/**
+ * Roughly how long the child worked, mapped to the Postgres enum `durasi_pengerjaan`.
+ *
+ * Buckets rather than a minute field: one tap instead of estimating and typing a number, which
+ * matters for this audience and still shows a trend over time.
+ */
+enum class WorkDuration(val dbValue: String, val label: String) {
+    UNDER_5("kurang_5", "< 5 menit"),
+    FROM_5_TO_15("5_15", "5–15 menit"),
+    FROM_15_TO_30("15_30", "15–30 menit"),
+    OVER_30("lebih_30", "> 30 menit"),
 }
 
 /** Insert payload for `public.dokumentasi` (parent's proof that the child did the task). */
@@ -39,6 +60,10 @@ data class TaskCompletionInsert(
     @SerialName("occurrence_date") val occurrenceDate: String,
     @SerialName("dokumentasi_id") val dokumentasiId: String? = null,
     val catatan: String? = null,
+    /** [ChildResponse.dbValue]; null when the parent skipped the question. */
+    val kemandirian: String? = null,
+    /** [WorkDuration.dbValue]; null when the parent skipped the question. */
+    val durasi: String? = null,
 )
 
 /** Minimal read model: which occurrences of which tasks are already done. */

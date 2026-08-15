@@ -9,6 +9,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
 import com.antoniusindra.sipatokkong.data.model.ChildResponse
+import com.antoniusindra.sipatokkong.data.model.WorkDuration
 import com.antoniusindra.sipatokkong.data.model.DocumentationInsert
 import com.antoniusindra.sipatokkong.data.model.MediaKind
 import com.antoniusindra.sipatokkong.data.model.Task
@@ -35,6 +36,7 @@ data class TaskDetailUiState(
     val alreadyDone: Boolean = false,
     // completion form
     val response: ChildResponse? = null,
+    val duration: WorkDuration? = null,
     val catatan: String = "",
     val proofUri: String? = null,
     val proofKind: MediaKind? = null,
@@ -86,6 +88,7 @@ class TaskDetailViewModel(
     }
 
     fun onResponseChange(r: ChildResponse) = _uiState.update { it.copy(response = r) }
+    fun onDurationChange(d: WorkDuration) = _uiState.update { it.copy(duration = d) }
     fun onCatatanChange(v: String) = _uiState.update { it.copy(catatan = v) }
 
     fun onProofPicked(uri: Uri) {
@@ -117,13 +120,10 @@ class TaskDetailViewModel(
             return
         }
 
-        val note = buildString {
-            s.response?.let { append("Respon anak: ${it.label}.") }
-            if (s.catatan.isNotBlank()) {
-                if (isNotEmpty()) append(" ")
-                append(s.catatan.trim())
-            }
-        }.ifBlank { null }
+        // Kemandirian and durasi are their own columns now, so the note holds only what the
+        // parent actually typed. Previously the answer was prefixed into this text, which made it
+        // impossible to count or chart.
+        val note = s.catatan.trim().ifBlank { null }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSubmitting = true, submitError = null) }
@@ -154,6 +154,8 @@ class TaskDetailViewModel(
                         occurrenceDate = occurrenceDate.toString(),
                         dokumentasiId = dokumentasiId,
                         catatan = note,
+                        kemandirian = s.response?.dbValue,
+                        durasi = s.duration?.dbValue,
                     )
                 )
                 _uiState.update { it.copy(isSubmitting = false, isSuccess = true) }
