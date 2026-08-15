@@ -61,6 +61,15 @@ loads on a new calendar day — there is no timer forcing a refresh at midnight.
 Deliberate side effect: a task completed today appears on **both** the home screen and the history
 screen at the same time.
 
+### Ordering within a day
+
+Set by `TaskOccurrences.build` in `data/model/TaskOccurrence.kt`: date, then **unfinished before
+finished**, then priority (high → low), then title.
+
+Keeping finished cards on the list only works if they sink below what still needs doing —
+otherwise a completed high-priority task would push an unfinished medium-priority one out of
+sight, which defeats the point of showing them at all.
+
 ## Known Limitations
 
 *   **The history screen only covers the last 30 days.** `history` is derived from the same
@@ -75,6 +84,21 @@ screen at the same time.
     carries its own `occurrence_date`, so no rule expansion and no date window are needed at all.
 
 ## Change Log
+
+### [2026-08-16] - Finished Occurrences Now Sort Below Unfinished Ones
+* **The problem:** `TaskOccurrences.build` sorted by date → priority → title, ignoring `isDone`.
+    Inside a day, a **completed high-priority** task therefore sat above an **unfinished
+    medium-priority** one. Keeping finished cards on the home screen is only defensible while they
+    sink below what still needs attention, so this undercut that whole decision.
+* **Fix:** Added `isDone` as the second comparator (Kotlin orders `false` before `true`).
+* **Tests:** `TaskOccurrences.build` had no coverage at all despite deciding what parents see.
+    Added `TaskOccurrencesTest` — 9 cases covering ordering, per-occurrence completion matching on
+    `(tugas_id, occurrence_date)`, unique list keys, and overdue logic.
+* **Verified:** `assembleDebug` green; 26 unit tests pass (9 new + 16 `RecurrenceTest` + 1 sample).
+    The ordering test was also run against the *unfixed* code and **failed** as expected — proof it
+    actually catches the regression rather than passing either way.
+* **Not yet verified:** Runtime appearance. The `@Preview` in `ParentHomeScreen` shows the new
+    order without a device, but on-device confirmation still waits on a parent account.
 
 ### [2026-08-16] - Documented Task Visibility Rules + 30-Day History Cap
 * **What changed:** No code. Added a **Product Rules** section spelling out exactly when a finished

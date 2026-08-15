@@ -45,7 +45,14 @@ object TaskOccurrences {
                 )
             }
         }.sortedWith(
-            compareBy({ it.date }, { priorityRank(it.task.priorityLevel) }, { it.task.judul })
+            // Unfinished first within a day (false < true), so a completed high-priority task
+            // never pushes something that still needs doing further down the list.
+            compareBy(
+                { it.date },
+                { it.isDone },
+                { priorityRank(it.task.priorityLevel) },
+                { it.task.judul },
+            )
         )
     }
 
