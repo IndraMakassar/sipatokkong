@@ -7,7 +7,7 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 
 ### ✅ Built / Completed
 *   **Infrastructure:** Supabase project setup, database schema, RLS policies, and storage bucket
-    configurations. Migrations `0001` and `0002` are both applied to the live project.
+    configurations. Migrations `0001`, `0002` and `0003` are all applied to the live project.
 *   **Authentication:** Phone Number + PIN login flow mapped to Supabase Auth. Role-based routing (Admin, Parent, Volunteer).
 *   **Admin Features:**
     *   Create Parent/Volunteer accounts (via `noSessionClient` to preserve admin session).
@@ -29,11 +29,6 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 *   **Media Compression:** Integration of client-side compressors into the upload pipeline.
 *   **Notifications:** Server-side triggers are defined, but real-time client-side handling and push notifications (FCM) are pending.
 *   **Presensi (Attendance):** Relawan vertical slice for logging home visits.
-
-### ⚠️ Pending Deployment Step
-*   **Migration `0003_kemandirian_durasi.sql` has NOT been run.** Once this branch merges, the
-    completion form sends `kemandirian` and `durasi` columns that do not exist yet, so **every
-    attempt to mark a task done will fail** until the migration is applied in Supabase.
 
 ### ❌ Not Built / Deferred
 *   **Admin Dashboard:** Progress recaps for donors and attendance overviews.
@@ -102,7 +97,12 @@ screen at the same time.
     exact order. That test was also run against a deliberately typo'd value and **failed** as
     intended — a one-character drift now breaks the build instead of failing an insert after a
     parent has filled in the form.
-* **Not yet verified:** all runtime behaviour, and the migration has not been applied.
+* **Migration status:** `0003` was applied to the live project before merging, which is the safe
+    order — the columns are nullable and the code on `master` does not send them, so they simply
+    sat unused until this branch lands. Merging first would have broken **every** completion in
+    the gap, including ordinary one-shot tasks.
+* **Not yet verified:** all runtime behaviour. Applying the migration removes the database
+    blocker, but nothing has exercised the new columns yet; that still needs a parent account.
 
 ### [2026-08-16] - Documented Task Visibility Rules + 30-Day History Cap
 * **What changed:** No code. Added a **Product Rules** section spelling out exactly when a finished
