@@ -26,7 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.antoniusindra.sipatokkong.data.model.Task
+import com.antoniusindra.sipatokkong.data.model.TaskOccurrence
+import java.time.LocalDate
 import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
 import com.antoniusindra.sipatokkong.ui.theme.MutedText
 
@@ -34,9 +35,11 @@ import com.antoniusindra.sipatokkong.ui.theme.MutedText
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ParentHistoryScreen(
-    tasks: List<Task>,
+    /** Completed occurrences — a recurring program appears once per date it was done. */
+    history: List<TaskOccurrence>,
+    today: LocalDate,
     onBack: () -> Unit,
-    onOpenTask: (String) -> Unit,
+    onOpenTask: (String, LocalDate) -> Unit,
 ) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -56,8 +59,8 @@ fun ParentHistoryScreen(
             )
         }
     ) { innerPadding ->
-        val completedTasks = tasks.filter { it.status == "done" }
-        
+        val completed = history.filter { it.isDone }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -67,7 +70,7 @@ fun ParentHistoryScreen(
                 .padding(top = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            if (completedTasks.isEmpty()) {
+            if (completed.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
                     contentAlignment = Alignment.Center
@@ -84,8 +87,17 @@ fun ParentHistoryScreen(
                     }
                 }
             } else {
-                completedTasks.forEach { task ->
-                    TaskCard(task, onClick = { onOpenTask(task.id) })
+                completed.forEach { occurrence ->
+                    Text(
+                        dateHeaderLabel(occurrence.date, today),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MutedText,
+                    )
+                    TaskCard(
+                        occurrence = occurrence,
+                        today = today,
+                        onClick = { onOpenTask(occurrence.task.id, occurrence.date) },
+                    )
                 }
             }
         }

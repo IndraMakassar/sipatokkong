@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.antoniusindra.sipatokkong.data.model.Profile
 import com.antoniusindra.sipatokkong.data.model.Task
+import com.antoniusindra.sipatokkong.data.model.TaskOccurrence
 import com.antoniusindra.sipatokkong.data.model.UserRole
 import com.antoniusindra.sipatokkong.ui.components.RichTextDisplay
 import com.antoniusindra.sipatokkong.ui.feedback.FeedbackListScreen
@@ -74,6 +75,9 @@ import com.antoniusindra.sipatokkong.ui.theme.StatusRedBg
 import com.antoniusindra.sipatokkong.ui.theme.StatusRedText
 import com.antoniusindra.sipatokkong.ui.theme.StatusTealBg
 import com.antoniusindra.sipatokkong.ui.theme.StatusTealText
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 // ---------------------------------------------------------------------------
 // Local brand palette — scoped to this screen so it matches the mockup exactly
@@ -84,14 +88,24 @@ internal val IconTint = Color(0xFF2E6E7E)
 internal val TipsBg = Color(0xFFECEDEE)
 internal val TipsIcon = Color(0xFFD9A521)
 
-/** Maps a `tugas.status` value to a display chip (label + colors). */
+/** Display chip (label + colors) for one dated occurrence. */
 internal data class StatusStyle(val label: String, val bg: Color, val text: Color)
 
-internal fun statusStyle(status: String): StatusStyle = when (status) {
-    "done" -> StatusStyle("Selesai", StatusTealBg, StatusTealText)
-    "submitted" -> StatusStyle("Dikirim", StatusGreenBg, StatusGreenText)
-    "overdue" -> StatusStyle("Terlambat", StatusRedBg, StatusRedText)
-    else -> StatusStyle("Menunggu", StatusOrangeBg, StatusOrangeText) // assigned
+internal fun occurrenceStyle(occurrence: TaskOccurrence, today: LocalDate): StatusStyle = when {
+    occurrence.isDone -> StatusStyle("Selesai", StatusTealBg, StatusTealText)
+    occurrence.date < today -> StatusStyle("Terlambat", StatusRedBg, StatusRedText)
+    occurrence.date == today -> StatusStyle("Hari ini", StatusGreenBg, StatusGreenText)
+    else -> StatusStyle("Menunggu", StatusOrangeBg, StatusOrangeText)
+}
+
+internal val DateHeaderFormat =
+    DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy", Locale.forLanguageTag("id-ID"))
+
+/** "Hari Ini" / "Besok" / full date — friendlier than a bare date as a group header. */
+internal fun dateHeaderLabel(date: LocalDate, today: LocalDate): String = when (date) {
+    today -> "Hari Ini"
+    today.plusDays(1) -> "Besok"
+    else -> date.format(DateHeaderFormat)
 }
 
 /** Parent (Orang Tua) home dashboard. Mirrors `assests/dashboard orang tua.png`. */
@@ -101,11 +115,14 @@ fun ParentHomeScreen(
     profile: Profile,
     onLogout: () -> Unit,
     onOpenNotifications: () -> Unit = {},
-    onOpenTask: (String) -> Unit = {},
+    onOpenTask: (String, LocalDate) -> Unit = { _, _ -> },
     onOpenFeedbackThread: (String) -> Unit = {},
     onComposeFeedback: () -> Unit = {},
     onSeeAllHistory: () -> Unit = {},
-    tasks: List<Task> = emptyList(),
+    occurrencesByDate: List<Pair<LocalDate, List<TaskOccurrence>>> = emptyList(),
+    weekDone: Int = 0,
+    weekTotal: Int = 0,
+    today: LocalDate = LocalDate.now(),
     isLoadingTasks: Boolean = false,
     childName: String = "Almair",
 ) {
@@ -152,7 +169,10 @@ fun ParentHomeScreen(
                 0 -> BerandaContent(
                     profile = profile,
                     childName = childName,
-                    tasks = tasks,
+                    occurrencesByDate = occurrencesByDate,
+                    weekDone = weekDone,
+                    weekTotal = weekTotal,
+                    today = today,
                     isLoadingTasks = isLoadingTasks,
                     onOpenTask = onOpenTask,
                     onSeeAllHistory = onSeeAllHistory,
@@ -173,9 +193,12 @@ fun ParentHomeScreen(
 private fun BerandaContent(
     profile: Profile,
     childName: String,
-    tasks: List<Task>,
+    occurrencesByDate: List<Pair<LocalDate, List<TaskOccurrence>>>,
+    weekDone: Int,
+    weekTotal: Int,
+    today: LocalDate,
     isLoadingTasks: Boolean,
-    onOpenTask: (String) -> Unit,
+    onOpenTask: (String, LocalDate) -> Unit,
     onSeeAllHistory: () -> Unit,
 ) {
     Column(
@@ -191,24 +214,37 @@ private fun BerandaContent(
             Text("Halo, ${profile.fullName}!", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         }
 
-        WeeklyProgressCard(childName = childName, tasks = tasks)
+        WeeklyProgressCard(childName = childName, done = weekDone, total = weekTotal)
 
         SectionHeader(onSeeAllClick = onSeeAllHistory)
 
-        val activeTasks = tasks.filter { it.status != "done" }
         when {
             isLoadingTasks -> Box(
                 Modifier.fillMaxWidth().padding(24.dp),
                 contentAlignment = Alignment.Center
             ) { CircularProgressIndicator() }
 
-            activeTasks.isEmpty() -> Text(
-                "Belum ada tugas terapi minggu ini.",
+            occurrencesByDate.isEmpty() -> Text(
+                "Belum ada tugas terapi yang perlu dikerjakan.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MutedText,
             )
 
-            else -> activeTasks.forEach { task -> TaskCard(task, onClick = { onOpenTask(task.id) }) }
+            else -> occurrencesByDate.forEach { (date, items) ->
+                Text(
+                    dateHeaderLabel(date, today),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (date < today) StatusRedText else MutedText,
+                )
+                items.forEach { occurrence ->
+                    TaskCard(
+                        occurrence = occurrence,
+                        today = today,
+                        onClick = { onOpenTask(occurrence.task.id, occurrence.date) },
+                    )
+                }
+            }
         }
 
 //        TipsCard(childName = childName)
@@ -216,9 +252,7 @@ private fun BerandaContent(
 }
 
 @Composable
-private fun WeeklyProgressCard(childName: String, tasks: List<Task>) {
-    val done = tasks.count { it.status == "done" }
-    val total = tasks.size
+private fun WeeklyProgressCard(childName: String, done: Int, total: Int) {
     val active = total - done
 
     Card(
@@ -303,8 +337,9 @@ private fun SectionHeader(onSeeAllClick: () -> Unit) {
 }
 
 @Composable
-internal fun TaskCard(task: Task, onClick: () -> Unit) {
-    val style = statusStyle(task.status)
+internal fun TaskCard(occurrence: TaskOccurrence, today: LocalDate, onClick: () -> Unit) {
+    val task = occurrence.task
+    val style = occurrenceStyle(occurrence, today)
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -347,7 +382,7 @@ internal fun TaskCard(task: Task, onClick: () -> Unit) {
                 StatusChip(style.label, style.bg, style.text)
             }
 
-            if (!task.instruksi.isNullOrBlank() || !task.deadline.isNullOrBlank()) {
+            if (!task.instruksi.isNullOrBlank() || task.isRecurring) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     if (!task.instruksi.isNullOrBlank()) {
                         RichTextDisplay(
@@ -356,9 +391,9 @@ internal fun TaskCard(task: Task, onClick: () -> Unit) {
                             maxLines = 2
                         )
                     }
-                    if (!task.deadline.isNullOrBlank()) {
+                    if (task.isRecurring) {
                         Text(
-                            "Deadline: ${task.deadline}",
+                            task.toRecurrenceRule().describe(),
                             style = MaterialTheme.typography.labelMedium,
                             color = MutedText,
                         )
@@ -427,21 +462,34 @@ private fun androidx.compose.foundation.layout.RowScope.ParentNavItem(
 @Composable
 private fun ParentHomeScreenPreview() {
     SipatokkongTheme(dynamicColor = false) {
+        val today = LocalDate.of(2026, 8, 1)
+        val sensori = Task(
+            id = "1", anakId = "a", relawanId = "r", judul = "Latihan Sensori",
+            instruksi = "Ajak anak menyentuh tekstur kain selama 2 menit.",
+            mediaKind = "image", mediaPath = "x", priorityLevel = "medium",
+            deadline = "2026-08-01", status = "assigned",
+        )
+        val bicara = Task(
+            id = "2", anakId = "a", relawanId = "r", judul = "Latihan Bicara",
+            instruksi = "Latihan pengucapan vokal dasar.",
+            mediaKind = "video", mediaPath = "y", priorityLevel = "high",
+            status = "assigned",
+            recurrence = "weekly", recurrenceDays = listOf(1, 4),
+            startsOn = "2026-08-01", endsOn = "2026-09-01",
+        )
         ParentHomeScreen(
             profile = Profile(id = "preview", role = UserRole.ORANGTUA, fullName = "Ibu Almair"),
             onLogout = {},
-            tasks = listOf(
-                Task(
-                    id = "1", anakId = "a", relawanId = "r", judul = "Latihan Sensori",
-                    instruksi = "Ajak anak menyentuh tekstur kain selama 2 menit.",
-                    mediaKind = "image", mediaPath = "x", priorityLevel = "medium",
-                    deadline = "2026-08-01", status = "assigned",
+            today = today,
+            weekDone = 1,
+            weekTotal = 3,
+            occurrencesByDate = listOf(
+                today to listOf(
+                    TaskOccurrence(sensori, today, isDone = false),
+                    TaskOccurrence(bicara, today, isDone = false),
                 ),
-                Task(
-                    id = "2", anakId = "a", relawanId = "r", judul = "Latihan Bicara",
-                    instruksi = "Latihan pengucapan vokal dasar.",
-                    mediaKind = "video", mediaPath = "y", priorityLevel = "high",
-                    deadline = null, status = "done",
+                today.plusDays(3) to listOf(
+                    TaskOccurrence(bicara, today.plusDays(3), isDone = false),
                 ),
             ),
         )

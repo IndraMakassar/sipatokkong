@@ -25,11 +25,25 @@ data class DocumentationInsert(
 @Serializable
 data class InsertedId(val id: String)
 
-/** Insert payload for `public.tugas_penyelesaian` (marks a task done; a DB trigger sets status='done'). */
+/**
+ * Insert payload for `public.tugas_penyelesaian` — marks one occurrence of a task done.
+ *
+ * `occurrence_date` is what makes recurring programs work: the unique constraint is
+ * `(tugas_id, occurrence_date)`, so the same program can be completed once per due date.
+ * A DB trigger still flips `status` to 'done', but only for one-shot tasks.
+ */
 @Serializable
 data class TaskCompletionInsert(
     @SerialName("tugas_id") val tugasId: String,
     @SerialName("orangtua_id") val orangtuaId: String,
+    @SerialName("occurrence_date") val occurrenceDate: String,
     @SerialName("dokumentasi_id") val dokumentasiId: String? = null,
     val catatan: String? = null,
+)
+
+/** Minimal read model: which occurrences of which tasks are already done. */
+@Serializable
+data class TaskCompletion(
+    @SerialName("tugas_id") val tugasId: String,
+    @SerialName("occurrence_date") val occurrenceDate: String,
 )
