@@ -11,6 +11,8 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 *   **Admin Features:**
     *   Create Parent/Volunteer accounts (via `noSessionClient` to preserve admin session).
     *   Create Child profiles and link them to parents.
+    *   Manage & edit accounts and children: searchable lists, edit forms, active/inactive
+        toggle, move a child to another parent, add/remove volunteer assignments.
 *   **Parent Features:**
     *   Home dashboard with task summary and status.
     *   Task detail view.
@@ -18,12 +20,20 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
     *   Basic notification list screen.
 *   **Volunteer Features:**
     *   Create Task (Program Ajar) with media upload and rich text instructions.
+    *   Recurring programs (daily / weekly / monthly / every-N-days) with an end date, plus a
+        "Program Ajar Saya" screen for stopping a running program.
 *   **Communication:** Feedback threads for parent-volunteer interaction.
 
 ### 🚧 In Progress / Partially Built
 *   **Media Compression:** Integration of client-side compressors into the upload pipeline.
 *   **Notifications:** Server-side triggers are defined, but real-time client-side handling and push notifications (FCM) are pending.
 *   **Presensi (Attendance):** Relawan vertical slice for logging home visits.
+
+### ⚠️ Pending Deployment Step
+*   **Migration `0002_recurring_tugas.sql` has NOT been run.** The recurring-program code is on
+    `master`, but until this migration is applied in Supabase the `occurrence_date` column does
+    not exist and **every attempt to mark a task done will fail** — including for ordinary
+    one-shot tasks, since completions now carry that column. Run it before any deploy or demo.
 
 ### ❌ Not Built / Deferred
 *   **Admin Dashboard:** Progress recaps for donors and attendance overviews.
@@ -37,6 +47,41 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 *   **Simple Access:** No email/password registration. Account creation is restricted to Admins; login is via Phone + PIN.
 
 ## Change Log
+
+### [2026-08-15] - Merge Verification of PRs #10–#12
+* **What changed:** No code. PRs #10, #11 and #12 merged into `master` without git conflicts.
+    Because each branch had been built in isolation from `d20e226`, the combination had never
+    been compiled — a clean-room build was run to rule out a semantic conflict.
+* **Verified:** `clean` + `assembleDebug` + `testDebugUnitTest` on merged `master` (`d244efa`):
+    build succeeded with no errors or warnings, 16 `RecurrenceTest` cases passed, APK produced.
+    `SipatokkongMain.kt` — the only file both feature PRs touched — merged correctly: both route
+    sets present, no duplicate imports or composables, and only the 2-argument `tugas_detail`
+    route survived.
+* **Not yet verified:** Runtime behaviour of either feature. `local.properties` still has no
+    Supabase credentials, and migration `0002` has not been applied.
+
+### [2026-08-15] - Recurring Program Ajar (PR #11)
+* **What changed:** One `tugas` row now models a whole PROGRAM. The recurrence rule is stored as
+    columns; occurrence dates are computed on the client rather than stored as rows. Completions
+    are keyed per `(tugas_id, occurrence_date)`, replacing the old `unique(tugas_id)`.
+* **Why this shape:** One row per occurrence would mean 90 rows for a 3-month daily program, and
+    `on_tugas_insert` would fire 90 notifications at once. Rule-based keeps it at one.
+* **Decisions worth remembering:** monthly-on-the-31st clamps to the last day of short months
+    rather than skipping them; `stoppedOn` is exclusive, so stopping today also cancels today.
+* **Verified:** Build green; 16 unit tests covering daily, weekly multi-day, monthly across
+    February, interval cadence, and the `endsOn`/`stoppedOn` bounds.
+* **Not yet verified:** All runtime behaviour. Requires migration `0002` plus credentials.
+
+### [2026-08-15] - Admin Manage & Edit (PR #10)
+* **What changed:** Admin can now list, search and edit parent/volunteer accounts and children —
+    previously data could only be created, never corrected.
+* **Schema limits that shaped it:** there is no `DELETE` policy for `profiles` or `anak`, so
+    "delete" is an `is_active` toggle; and another user's email/password cannot be changed from
+    the app at all, since that needs the Admin API with the `service_role` key.
+* **Side effect:** `profilesByRole()` now filters `is_active`, so deactivated accounts no longer
+    appear in the "Tambah Data Anak" dropdowns.
+* **Verified:** Build green, no warnings.
+* **Not yet verified:** All runtime behaviour.
 
 ### [2026-08-15] - Status Document Automation
 * **What changed:** Added `.claude/settings.json` plus two stdlib-Python hooks. `SessionStart`
