@@ -28,6 +28,10 @@ import com.antoniusindra.sipatokkong.core.di.ServiceLocator
 import com.antoniusindra.sipatokkong.data.model.UserRole
 import com.antoniusindra.sipatokkong.ui.admin.CreateAccountScreen
 import com.antoniusindra.sipatokkong.ui.admin.CreateChildScreen
+import com.antoniusindra.sipatokkong.ui.admin.EditAccountScreen
+import com.antoniusindra.sipatokkong.ui.admin.EditChildScreen
+import com.antoniusindra.sipatokkong.ui.admin.ManageAccountsScreen
+import com.antoniusindra.sipatokkong.ui.admin.ManageChildrenScreen
 import com.antoniusindra.sipatokkong.ui.auth.login.LoginScreen
 import com.antoniusindra.sipatokkong.ui.feedback.CreateFeedbackScreen
 import com.antoniusindra.sipatokkong.ui.feedback.FeedbackListScreen
@@ -126,6 +130,9 @@ fun SipatokkongMain() {
                             onCreateOrangtua = { navController.navigate("create_orangtua") },
                             onCreateRelawan = { navController.navigate("create_relawan") },
                             onCreateAnak = { navController.navigate("create_anak") },
+                            onManageOrangtua = { navController.navigate("manage_orangtua") },
+                            onManageRelawan = { navController.navigate("manage_relawan") },
+                            onManageAnak = { navController.navigate("manage_anak") },
                             onLogout = {
                                 scope.launch {
                                     sessionManager.signOut()
@@ -192,6 +199,38 @@ fun SipatokkongMain() {
                 }
                 composable("create_anak") {
                     CreateChildScreen(onBack = { navController.popBackStack() })
+                }
+                composable("manage_orangtua") {
+                    ManageAccountsScreen(
+                        role = UserRole.ORANGTUA,
+                        onBack = { navController.popBackStack() },
+                        onEdit = { id -> navController.navigate("edit_akun/$id") },
+                    )
+                }
+                composable("manage_relawan") {
+                    ManageAccountsScreen(
+                        role = UserRole.RELAWAN,
+                        onBack = { navController.popBackStack() },
+                        onEdit = { id -> navController.navigate("edit_akun/$id") },
+                    )
+                }
+                composable("manage_anak") {
+                    ManageChildrenScreen(
+                        onBack = { navController.popBackStack() },
+                        onEdit = { id -> navController.navigate("edit_anak/$id") },
+                    )
+                }
+                composable("edit_akun/{profileId}") { backStackEntry ->
+                    val id = backStackEntry.arguments?.getString("profileId")
+                    if (id != null) {
+                        EditAccountScreen(profileId = id, onBack = { navController.popBackStack() })
+                    }
+                }
+                composable("edit_anak/{anakId}") { backStackEntry ->
+                    val id = backStackEntry.arguments?.getString("anakId")
+                    if (id != null) {
+                        EditChildScreen(anakId = id, onBack = { navController.popBackStack() })
+                    }
                 }
                 composable("parent_feedback_list") {
                     FeedbackListScreen(
