@@ -23,7 +23,16 @@ data class ProgramListUiState(
     val today: LocalDate = LocalDate.now(),
     val isLoading: Boolean = true,
     val stoppingId: String? = null,
+    /** A failed *load*. Replaces the list, because there is nothing to show. */
     val error: String? = null,
+    /**
+     * A failed *action*, kept apart from [error] on purpose.
+     *
+     * Both used to share one field, so a failed "Hentikan Program" wiped the whole list and left a
+     * full-screen red message — the volunteer lost everything they were looking at because one
+     * button failed.
+     */
+    val actionError: String? = null,
 ) {
     fun childNameOf(task: Task): String = childNames[task.anakId] ?: "Anak tidak dikenal"
 
@@ -40,9 +49,8 @@ class ProgramListViewModel(
     private val _uiState = MutableStateFlow(ProgramListUiState())
     val uiState: StateFlow<ProgramListUiState> = _uiState.asStateFlow()
 
-    init {
-        refresh()
-    }
+    // No init { refresh() }: ProgramListScreen already calls refresh() from a LaunchedEffect, so
+    // having both meant two network round-trips on every entry.
 
     fun refresh() {
         viewModelScope.launch {
@@ -71,19 +79,25 @@ class ProgramListViewModel(
     /** Stops a program; from today on it produces no further occurrences. */
     fun stopProgram(tugasId: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(stoppingId = tugasId, error = null) }
+            _uiState.update { it.copy(stoppingId = tugasId, actionError = null) }
             runCatching { taskRepository.stopProgram(tugasId) }
                 .onSuccess {
                     _uiState.update { it.copy(stoppingId = null) }
                     refresh()
                 }
                 .onFailure { e ->
+                    // actionError, not error: the list stays on screen.
                     _uiState.update {
-                        it.copy(stoppingId = null, error = e.message ?: "Gagal menghentikan program")
+                        it.copy(
+                            stoppingId = null,
+                            actionError = e.message ?: "Gagal menghentikan program",
+                        )
                     }
                 }
         }
     }
+
+    fun dismissActionError() = _uiState.update { it.copy(actionError = null) }
 
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {

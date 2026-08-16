@@ -185,7 +185,7 @@ fun ParentHomeScreen(
                     onCompose = onComposeFeedback,
                     useScaffold = false // I will add this parameter to FeedbackListScreen
                 )
-                else -> ParentProfileScreen(profile = profile, onLogout = onLogout)
+                else -> ProfileScreen(profile = profile, onLogout = onLogout)
             }
         }
     }

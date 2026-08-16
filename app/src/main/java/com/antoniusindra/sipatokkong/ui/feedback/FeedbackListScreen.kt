@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -28,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +40,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.antoniusindra.sipatokkong.data.model.Feedback
+import com.antoniusindra.sipatokkong.ui.components.EmptyState
+import com.antoniusindra.sipatokkong.ui.components.ErrorRetry
 import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
 import com.antoniusindra.sipatokkong.ui.theme.MutedText
 import com.antoniusindra.sipatokkong.ui.theme.StatusBlueBg
@@ -71,9 +75,15 @@ fun FeedbackListScreen(
     onOpenThread: (String) -> Unit,
     onCompose: (() -> Unit)? = null,
     useScaffold: Boolean = true,
+    /** Parent-voiced by default; a volunteer sees this list under a different title. */
+    emptyText: String = "Belum ada catatan/feedback.",
     viewModel: FeedbackListViewModel = viewModel(factory = FeedbackListViewModel.Factory),
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
+
+    // Re-runs when this screen re-enters composition after popping back from a thread, so a reply
+    // sent there is reflected here. Without it the list only ever loaded once per process.
+    LaunchedEffect(Unit) { viewModel.refresh() }
 
     val content = @Composable { padding: androidx.compose.foundation.layout.PaddingValues ->
         when {
@@ -82,11 +92,15 @@ fun FeedbackListScreen(
             }
 
             ui.error != null -> Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) {
-                Text(ui.error!!, color = MaterialTheme.colorScheme.error)
+                ErrorRetry(message = ui.error!!, onRetry = viewModel::refresh)
             }
 
             ui.items.isEmpty() -> Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) {
-                Text("Belum ada catatan/feedback.", color = MutedText)
+                EmptyState(
+                    icon = Icons.AutoMirrored.Filled.Chat,
+                    title = "Belum ada feedback",
+                    subtitle = emptyText,
+                )
             }
 
             else -> LazyColumn(

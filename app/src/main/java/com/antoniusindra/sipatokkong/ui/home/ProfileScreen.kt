@@ -56,10 +56,25 @@ import com.antoniusindra.sipatokkong.ui.theme.MutedText
 import com.antoniusindra.sipatokkong.ui.theme.ProgressGradBottom
 import com.antoniusindra.sipatokkong.ui.theme.ProgressGradTop
 
+/**
+ * The signed-in user's own profile: avatar, name, contact details, edit, and sign out.
+ *
+ * Role-neutral apart from the two parameters below — it was written for parents but the only
+ * parent-specific parts were a hardcoded label and one field, so volunteers reuse it rather than
+ * getting a second near-identical screen.
+ *
+ * Has no Scaffold on purpose: it is always embedded in a tab of a role's home screen.
+ *
+ * @param roleLabel shown under the name.
+ * @param showFamilyStatus `familyStatus` is only collected for parents; for anyone else the row
+ *   would always read "-", so it is left out entirely.
+ */
 @Composable
-fun ParentProfileScreen(
+fun ProfileScreen(
     profile: Profile,
     onLogout: () -> Unit,
+    roleLabel: String = "Orang Tua",
+    showFamilyStatus: Boolean = true,
     viewModel: ProfileViewModel = viewModel(factory = ProfileViewModel.Factory)
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -139,7 +154,7 @@ fun ParentProfileScreen(
                         color = Color.White
                     )
                     Text(
-                        text = "Orang Tua",
+                        text = roleLabel,
                         fontSize = 14.sp,
                         color = Color.White.copy(alpha = 0.8f)
                     )
@@ -205,11 +220,13 @@ fun ParentProfileScreen(
                         label = "Alamat",
                         value = uiState.profile?.address ?: profile.address ?: "-"
                     )
-                    ProfileInfoRow(
-                        icon = Icons.Filled.Person,
-                        label = "Status Keluarga",
-                        value = uiState.profile?.familyStatus ?: profile.familyStatus ?: "-"
-                    )
+                    if (showFamilyStatus) {
+                        ProfileInfoRow(
+                            icon = Icons.Filled.Person,
+                            label = "Status Keluarga",
+                            value = uiState.profile?.familyStatus ?: profile.familyStatus ?: "-"
+                        )
+                    }
                 }
             }
         }

@@ -137,6 +137,22 @@ fun CreateTaskScreen(
                 selectedName = ui.selectedChildName,
                 onSelect = viewModel::onAnakSelected,
             )
+            // Without this the child list could only fail once and stay failed: the form stayed
+            // fully interactive but unsubmittable, and retryLoadChildren() had no caller at all.
+            if (!ui.isLoadingChildren && ui.children.isEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Daftar anak kosong. Pastikan admin sudah menugaskan anak kepada Anda.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = viewModel::retryLoadChildren) { Text("Muat Ulang") }
+                }
+            }
 
             // ---- Judul ----
             OutlinedTextField(

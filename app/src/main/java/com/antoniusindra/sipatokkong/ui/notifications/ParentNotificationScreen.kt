@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.antoniusindra.sipatokkong.ui.components.EmptyState
 import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
 import com.antoniusindra.sipatokkong.ui.theme.MutedText
 import com.antoniusindra.sipatokkong.ui.theme.SipatokkongTheme
@@ -124,7 +125,12 @@ fun ParentNotificationScreen(
         }
     ) { innerPadding ->
         if (notifications.isEmpty()) {
-            EmptyState(Modifier.padding(innerPadding))
+            EmptyState(
+                icon = Icons.Filled.NotificationsNone,
+                title = "Belum ada notifikasi",
+                subtitle = "Pengingat tugas & balasan feedback akan muncul di sini.",
+                modifier = Modifier.padding(innerPadding),
+            )
         } else {
             LazyColumn(
                 modifier = Modifier
@@ -187,28 +193,6 @@ private fun NotificationCard(notif: ParentNotification) {
     }
 }
 
-@Composable
-private fun EmptyState(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(
-            Icons.Filled.NotificationsNone,
-            contentDescription = null,
-            tint = MutedText,
-            modifier = Modifier.size(48.dp),
-        )
-        Spacer(Modifier.size(12.dp))
-        Text("Belum ada notifikasi", fontWeight = FontWeight.Bold)
-        Text(
-            "Pengingat tugas & balasan feedback akan muncul di sini.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MutedText,
-        )
-    }
-}
 
 private fun iconFor(type: ParentNotifType): Triple<ImageVector, Color, Color> = when (type) {
     ParentNotifType.TUGAS_BARU -> Triple(Icons.AutoMirrored.Filled.Assignment, TaskBoxBg, TaskTint)
