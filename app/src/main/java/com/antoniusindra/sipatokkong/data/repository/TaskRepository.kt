@@ -3,6 +3,7 @@ package com.antoniusindra.sipatokkong.data.repository
 import com.antoniusindra.sipatokkong.data.model.DocumentationInsert
 import com.antoniusindra.sipatokkong.data.model.InsertedId
 import com.antoniusindra.sipatokkong.data.model.Task
+import com.antoniusindra.sipatokkong.data.model.TaskAidRow
 import com.antoniusindra.sipatokkong.data.model.TaskInsert
 import com.antoniusindra.sipatokkong.data.model.TaskCompletion
 import com.antoniusindra.sipatokkong.data.model.TaskCompletionInsert
@@ -31,6 +32,18 @@ class TaskRepository(private val client: SupabaseClient) {
     suspend fun create(insert: TaskInsert) {
         client.postgrest.from("tugas").insert(insert)
     }
+
+    /**
+     * Aids this volunteer has used before, for suggesting in the create-task menu.
+     *
+     * RLS `tugas_select` allows a volunteer only their own rows (`relawan_id = auth.uid()`), so
+     * this is their own history — aids do not travel between volunteers.
+     */
+    suspend fun aidsUsedByCurrentVolunteer(): List<String> =
+        client.postgrest.from("tugas")
+            .select(columns = Columns.list("alat_bantu"))
+            .decodeList<TaskAidRow>()
+            .flatMap { it.alatBantu.orEmpty() }
 
     // ---- Orang tua: read tasks + complete them ----
 

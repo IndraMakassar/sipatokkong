@@ -14,6 +14,108 @@ enum class TaskPriority(val dbValue: String, val label: String) {
     HIGH("high", "Tinggi"),
 }
 
+/**
+ * Household aids a task may involve, stored in `tugas.alat_bantu` as an array of [dbValue].
+ *
+ * The list is deliberately made of cheap or already-owned items: the families this app serves are
+ * low-income, so proposing clinical equipment would put the homework out of reach. Each entry
+ * traces back to therapy the app already describes — fabric textures and vowel practice appear in
+ * its own example tasks, and "starting to hold a spoon" is the README's example of progress.
+ */
+enum class TeachingAid(val dbValue: String, val label: String) {
+    KAIN("kain_tekstur", "Kain aneka tekstur"),
+    CERMIN("cermin", "Cermin"),
+    SEDOTAN("sedotan", "Sedotan"),
+    SENDOK_PIRING("sendok_piring", "Sendok & piring"),
+    KARTU_GAMBAR("kartu_gambar", "Kartu bergambar"),
+    BUKU_CERITA("buku_cerita", "Buku cerita bergambar"),
+    BOLA("bola", "Bola"),
+    BALOK_PUZZLE("balok_puzzle", "Balok susun / puzzle"),
+    KRAYON("krayon", "Krayon / pensil warna"),
+    BERAS_BIJI("beras_biji", "Beras / biji-bijian"),
+    BOTOL_TUTUP("botol_tutup", "Botol & tutup"),
+    MAINAN_BUNYI("mainan_bunyi", "Mainan bunyi");
+
+    companion object {
+        /**
+         * Cap on a volunteer-typed aid. The longest built-in label, "Buku cerita bergambar", is 21
+         * characters, so this leaves room without letting a stray paste fill the column.
+         */
+        const val MAX_CUSTOM_LENGTH = 40
+
+        private val WHITESPACE = Regex("\\s+")
+
+        fun fromDb(value: String): TeachingAid? = entries.firstOrNull { it.dbValue == value }
+
+        /**
+         * Stored values turned into display labels.
+         *
+         * An unrecognised value is passed through as-is rather than dropped. That covers two cases
+         * at once: a list that changed between releases, and an aid the volunteer typed themselves
+         * — the latter is stored as plain text and is *meant* to render verbatim.
+         */
+        fun labelsOf(values: List<String>?): List<String> = values.orEmpty().map(::labelOf)
+
+        /** One stored value as it should read on screen. See [labelsOf] for why unknowns pass through. */
+        fun labelOf(value: String): String = fromDb(value)?.label ?: value
+
+        /**
+         * A volunteer-typed aid cleaned up for storage: trimmed, runs of inner whitespace collapsed
+         * to one space, and capped at [MAX_CUSTOM_LENGTH]. Returns null when nothing survives.
+         */
+        fun normalizeCustom(raw: String): String? =
+            raw.trim()
+                .replace(WHITESPACE, " ")
+                .take(MAX_CUSTOM_LENGTH)
+                .trim()
+                .ifBlank { null }
+
+        /**
+         * Whatever the volunteer typed, turned into the value to store.
+         *
+         * A typed name that already exists resolves back to its [dbValue] rather than becoming a
+         * near-duplicate: "Cermin", "CERMIN" and "cermin" all end up as `cermin`. This matching is
+         * the only thing standing between a free-text field and a fragmented aid list, since
+         * nothing in the database constrains the column.
+         */
+        fun resolve(raw: String): String? {
+            val clean = normalizeCustom(raw) ?: return null
+            return matchBuiltIn(clean)?.dbValue ?: clean
+        }
+
+        /** The built-in an arbitrary string names, by either label or stored value, ignoring case. */
+        fun matchBuiltIn(value: String): TeachingAid? = entries.firstOrNull {
+            it.dbValue.equals(value, ignoreCase = true) || it.label.equals(value, ignoreCase = true)
+        }
+
+        /**
+         * Selected values in a stable order: built-ins in declaration order, then custom entries
+         * alphabetically.
+         *
+         * Deliberately not tap order — the parent should see the same list arranged the same way
+         * every time, however the volunteer happened to pick it.
+         */
+        fun sortedForStorage(values: Set<String>): List<String> {
+            val builtIn = entries.filter { it.dbValue in values }.map { it.dbValue }
+            val custom = values.filter { matchBuiltIn(it) == null }.sortedBy { it.lowercase() }
+            return builtIn + custom
+        }
+
+        /**
+         * Aids used on past tasks turned into menu suggestions.
+         *
+         * Built-ins are dropped — they are always in the menu anyway — and duplicates are removed
+         * ignoring case, so one volunteer's "Gunting" and "gunting" collapse into a single entry
+         * instead of offering the same aid twice.
+         */
+        fun suggestionsFrom(stored: List<String>): List<String> =
+            stored.mapNotNull { normalizeCustom(it) }
+                .filter { matchBuiltIn(it) == null }
+                .distinctBy { it.lowercase() }
+                .sortedBy { it.lowercase() }
+    }
+}
+
 /** Media kind, mapped to the Postgres enum `media_kind`. */
 enum class MediaKind(val dbValue: String) {
     IMAGE("image"),
@@ -43,6 +145,17 @@ data class TaskInsert(
     @SerialName("recurrence_interval") val recurrenceInterval: Int? = null,
     @SerialName("starts_on") val startsOn: String? = null,
     @SerialName("ends_on") val endsOn: String? = null,
+    /** [TeachingAid.dbValue] entries; null or empty when the task needs no aids. */
+    @SerialName("alat_bantu") val alatBantu: List<String>? = null,
+)
+
+/**
+ * Narrow read model for gathering aid suggestions — only `alat_bantu` is selected, so the query
+ * stays cheap enough to run every time the create-task screen opens.
+ */
+@Serializable
+data class TaskAidRow(
+    @SerialName("alat_bantu") val alatBantu: List<String>? = null,
 )
 
 /** Update payload used to stop a recurring program. */
@@ -74,7 +187,11 @@ data class Task(
     @SerialName("starts_on") val startsOn: String? = null,
     @SerialName("ends_on") val endsOn: String? = null,
     @SerialName("stopped_at") val stoppedAt: String? = null,
+    @SerialName("alat_bantu") val alatBantu: List<String>? = null,
 ) {
+    /** Display labels for the aids, with unknown stored values passed through untouched. */
+    val alatBantuLabels: List<String> get() = TeachingAid.labelsOf(alatBantu)
+
     val recurrenceType: RecurrenceType get() = RecurrenceType.fromDb(recurrence)
 
     val isRecurring: Boolean get() = recurrenceType != RecurrenceType.ONCE

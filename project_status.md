@@ -7,7 +7,7 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 
 ### ✅ Built / Completed
 *   **Infrastructure:** Supabase project setup, database schema, RLS policies, and storage bucket
-    configurations. Migrations `0001`, `0002` and `0003` are all applied to the live project.
+    configurations. Migrations `0001` through `0004` are all applied to the live project.
 *   **Authentication:** Phone Number + PIN login flow mapped to Supabase Auth. Role-based routing (Admin, Parent, Volunteer).
 *   **Admin Features:**
     *   Create Parent/Volunteer accounts (via `noSessionClient` to preserve admin session).
@@ -29,6 +29,7 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 *   **Media Compression:** Integration of client-side compressors into the upload pipeline.
 *   **Notifications:** Server-side triggers are defined, but real-time client-side handling and push notifications (FCM) are pending.
 *   **Presensi (Attendance):** Relawan vertical slice for logging home visits.
+
 
 ### ❌ Not Built / Deferred
 *   **Admin Dashboard:** Progress recaps for donors and attendance overviews.
@@ -84,6 +85,95 @@ sight, which defeats the point of showing them at all.
     carries its own `occurrence_date`, so no rule expansion and no date window are needed at all.
 
 ## Change Log
+
+### [2026-08-16] - Feature: Volunteers Can Add Their Own Teaching Aids
+* **The gap:** `TeachingAid` is an app constant, so an aid missing from the twelve built-ins could
+    only be added by editing code and shipping a new APK — unworkable for something a therapist
+    finds in the field.
+* **Most of the work was already done.** `alat_bantu` is `text[]` rather than an enum, and
+    `labelsOf` passes unrecognised values through untouched, so a volunteer-typed aid stores and
+    renders correctly with **zero changes to the parent's screen**.
+* **What was added:** the aid dropdown is now a searchable combobox. Typing filters the list;
+    already-picked aids are pinned above the results so a filter never hides the selection being
+    built; a `Tambah "…"` row commits new text. Aids used before are offered on the next task, so
+    they are typed once, not every time.
+* **Guard against a fragmented list:** `TeachingAid.resolve` folds a retyped built-in back onto its
+    stored value ("Cermin"/"CERMIN"/"cermin" → `cermin`), and typed text is trimmed, its inner
+    whitespace collapsed, and capped at 40 characters.
+* **Known limit — suggestions do not travel between volunteers.** `tugas_select` grants a volunteer
+    only `relawan_id = auth.uid()`, so the suggestion query sees only their own history. Sharing
+    aids across the team would need a new RLS policy or a shared catalogue table; neither is built.
+* **Two self-contradictions caught before landing:** the query was being cleared on every selection,
+    which made the pinned section pointless and snapped the menu from a few rows to twelve mid-tap —
+    it now survives a pick. And the anchor had to become `PrimaryEditable`: with
+    `PrimaryNotEditable` the popup takes IME focus and the keyboard closes on every keystroke.
+* **Tests:** 79 total, up from 41. Three were verified by reverting the code under test and
+    confirming the failure — `resolve`'s built-in folding, the pinned selection, and case-insensitive
+    suggestion dedup.
+* **Not verified:** anything on-screen. The layout, keyboard behaviour and menu height are untested
+    on a device.
+
+### [2026-08-16] - Fix: Wrapped Aid Chips Were Touching
+* **The bug:** Both `FlowRow`s added for teaching aids omitted `verticalArrangement`. `FlowRow`
+    only spaces chips horizontally, so once they wrapped onto a second line the rows sat flush
+    against each other at 0dp. With twelve aids and labels as long as "Buku cerita bergambar",
+    wrapping is the normal case, not an edge case.
+* **The answer was already in this repo.** `CreateFeedbackScreen` has set
+    `verticalArrangement = Arrangement.spacedBy(8.dp)` on its `FlowRow` all along; the new code
+    simply failed to follow an established pattern. Both now use the same values, so the aid chips
+    and the "kendala" chips read alike.
+* **Also:** chip padding went from `10.dp × 6.dp` to `12.dp × 8.dp` — `labelMedium` at 6dp vertical
+    sat tight against the chip edge.
+* **Fixed in both places,** including the volunteer's selection chips. That screen had the
+    identical defect and nobody had reported it yet, most likely because it had not been opened
+    with several aids selected.
+* **Verified:** `assembleDebug` green, 41 tests still pass, and all three `FlowRow`s in the
+    codebase now declare `verticalArrangement`.
+* **Not yet verified:** how it actually looks. This is a layout change and no screen was seen from
+    this machine.
+
+### [2026-08-16] - Teaching Aids ("Alat Bantu") on a Program Ajar
+* **What changed:** A task can now carry several household teaching aids. The volunteer picks them
+    from a fixed list when creating the program; the parent sees them read-only on the task detail
+    screen. This resolves the long-ambiguous "kolom media ajar" request, finally explained by a
+    teammate: *a task may have several aids, make it a dropdown, the volunteer fills it, and the
+    item list is fixed.*
+* **The list is grounded in this project, not a generic therapy catalogue.** Every entry is a cheap
+    or already-owned household item, because the families served are low-income and clinical
+    equipment would put the homework out of reach. Several trace directly to the app's own
+    material — fabric textures and vowel practice are its example tasks, and "starting to hold a
+    spoon" is the README's example of progress.
+* **Stored as `text[]`, not a Postgres enum.** The option list lives as an app constant, so an enum
+    would make adding one item need both an APK release *and* a migration; `text[]` needs only the
+    release. Array columns are already proven here by `recurrence_days smallint[]`.
+* **Unknown stored values are displayed, not dropped.** `TeachingAid.labelsOf` passes through any
+    value it does not recognise, so if the list changes in a later release, tasks saved under the
+    old list keep showing their aid rather than silently losing it.
+* **Verified:** `assembleDebug` green; 41 unit tests pass (9 new). The pass-through test was also
+    run against a naive `mapNotNull` implementation and **failed** as intended, so it genuinely
+    guards that behaviour rather than passing either way.
+* **Not yet verified:** all runtime behaviour. (Migration `0004` was applied on 2026-08-16.)
+
+### [2026-08-16] - Repo Cleanup + First Observed Stop-Hook Firing
+* **What changed:** No code. Local checkout moved back to `master` (`fea4f77`) and the merged
+    branches were deleted locally and on GitHub: `test/gabungan`, `feat/kemandirian-durasi`,
+    `fix/urutan-tugas-selesai`.
+* **Safety check worth recording:** `git branch -d` refused to delete `test/gabungan`, because the
+    local merge commit is not an ancestor of `master` — GitHub created its own merge commits for
+    PRs #13/#14. Before forcing with `-D`, both Change Log entries that had conflicted during that
+    local merge were confirmed present in `master` (only their order differs). Nothing was lost.
+* **The Stop hook fired for the first time** — previously listed as "not yet verified". It works.
+* **…and it was a false positive, exactly as predicted.** Nothing was written this turn; `git pull`
+    rewrote file mtimes, and `stop_gate.py` compares mtimes. Both `0003_kemandirian_durasi.sql` and
+    `project_status.md` landed in the same second (`03:02:58`) from that one pull, differing only
+    by milliseconds — enough to trip the gate.
+* **If this becomes annoying**, the fix is to compare against `git diff --name-only` /
+    `git status --porcelain` rather than mtimes, so pure git operations stop triggering it. Left
+    alone for now: the `stop_hook_active` guard already caps it at one nudge per turn.
+* **Verified:** Branch state after cleanup — 2 local branches, 4 remote, working tree clean,
+    `master` at `fea4f77`.
+* **Not yet verified:** Still nothing runtime. The four merged changes (independence scale,
+    duration, "Media Ajar" label, completed-task ordering) have never been exercised on a device.
 
 ### [2026-08-16] - Finished Occurrences Now Sort Below Unfinished Ones
 * **The problem:** `TaskOccurrences.build` sorted by date → priority → title, ignoring `isDone`.
