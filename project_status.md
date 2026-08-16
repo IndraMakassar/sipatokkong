@@ -7,7 +7,7 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 
 ### ✅ Built / Completed
 *   **Infrastructure:** Supabase project setup, database schema, RLS policies, and storage bucket
-    configurations. Migrations `0001`, `0002` and `0003` are all applied to the live project.
+    configurations. Migrations `0001` through `0004` are all applied to the live project.
 *   **Authentication:** Phone Number + PIN login flow mapped to Supabase Auth. Role-based routing (Admin, Parent, Volunteer).
 *   **Admin Features:**
     *   Create Parent/Volunteer accounts (via `noSessionClient` to preserve admin session).
@@ -30,10 +30,6 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 *   **Notifications:** Server-side triggers are defined, but real-time client-side handling and push notifications (FCM) are pending.
 *   **Presensi (Attendance):** Relawan vertical slice for logging home visits.
 
-### ⚠️ Pending Deployment Step
-*   **Migration `0004_alat_bantu.sql` has NOT been run.** Once the branch merges, creating a program
-    ajar sends an `alat_bantu` column that does not exist yet, so **task creation will fail** until
-    the migration is applied. Run it before merging, as with `0003`.
 
 ### ❌ Not Built / Deferred
 *   **Admin Dashboard:** Progress recaps for donors and attendance overviews.
@@ -156,7 +152,7 @@ sight, which defeats the point of showing them at all.
 * **Verified:** `assembleDebug` green; 41 unit tests pass (9 new). The pass-through test was also
     run against a naive `mapNotNull` implementation and **failed** as intended, so it genuinely
     guards that behaviour rather than passing either way.
-* **Not yet verified:** all runtime behaviour, and migration `0004` has not been applied.
+* **Not yet verified:** all runtime behaviour. (Migration `0004` was applied on 2026-08-16.)
 
 ### [2026-08-16] - Repo Cleanup + First Observed Stop-Hook Firing
 * **What changed:** No code. Local checkout moved back to `master` (`fea4f77`) and the merged
