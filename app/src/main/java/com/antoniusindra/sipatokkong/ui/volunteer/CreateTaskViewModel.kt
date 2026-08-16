@@ -12,6 +12,7 @@ import com.antoniusindra.sipatokkong.core.recurrence.RecurrenceType
 import com.antoniusindra.sipatokkong.data.model.ChildOption
 import com.antoniusindra.sipatokkong.data.model.MediaKind
 import com.antoniusindra.sipatokkong.data.model.TaskPriority
+import com.antoniusindra.sipatokkong.data.model.TeachingAid
 import com.antoniusindra.sipatokkong.data.model.TaskInsert
 import com.antoniusindra.sipatokkong.data.repository.ChildRepository
 import com.antoniusindra.sipatokkong.data.repository.TaskRepository
@@ -38,6 +39,7 @@ data class CreateTaskUiState(
     val mediaUri: String? = null,
     val mediaName: String? = null,
     val mediaKind: MediaKind? = null,
+    val alatBantu: Set<TeachingAid> = emptySet(),
     // ---- recurrence ----
     val recurrence: RecurrenceType = RecurrenceType.ONCE,
     val daysOfWeek: Set<DayOfWeek> = emptySet(),
@@ -99,6 +101,11 @@ class CreateTaskViewModel(
     fun onInstruksiChange(v: String) = _uiState.update { it.copy(instruksi = v) }
     fun onPriorityChange(p: TaskPriority) = _uiState.update { it.copy(priority = p) }
     fun onDeadlineChange(d: LocalDate?) = _uiState.update { it.copy(deadline = d) }
+
+    fun onAlatBantuToggle(aid: TeachingAid) = _uiState.update {
+        val next = if (aid in it.alatBantu) it.alatBantu - aid else it.alatBantu + aid
+        it.copy(alatBantu = next)
+    }
 
     fun onRecurrenceChange(type: RecurrenceType) = _uiState.update {
         // Default the start date to today the moment a repeating pattern is chosen.
@@ -203,6 +210,11 @@ class CreateTaskViewModel(
                         endsOn = if (s.isRecurring) {
                             s.endsOn?.format(DateTimeFormatter.ISO_LOCAL_DATE)
                         } else null,
+                        // Declaration order, not tap order, so the parent always sees a stable list.
+                        alatBantu = TeachingAid.entries
+                            .filter { it in s.alatBantu }
+                            .map { it.dbValue }
+                            .ifEmpty { null },
                     )
                 )
                 _uiState.update { it.copy(isSubmitting = false, isSuccess = true) }

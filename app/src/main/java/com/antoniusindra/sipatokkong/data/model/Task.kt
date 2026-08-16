@@ -14,6 +14,43 @@ enum class TaskPriority(val dbValue: String, val label: String) {
     HIGH("high", "Tinggi"),
 }
 
+/**
+ * Household aids a task may involve, stored in `tugas.alat_bantu` as an array of [dbValue].
+ *
+ * The list is deliberately made of cheap or already-owned items: the families this app serves are
+ * low-income, so proposing clinical equipment would put the homework out of reach. Each entry
+ * traces back to therapy the app already describes — fabric textures and vowel practice appear in
+ * its own example tasks, and "starting to hold a spoon" is the README's example of progress.
+ */
+enum class TeachingAid(val dbValue: String, val label: String) {
+    KAIN("kain_tekstur", "Kain aneka tekstur"),
+    CERMIN("cermin", "Cermin"),
+    SEDOTAN("sedotan", "Sedotan"),
+    SENDOK_PIRING("sendok_piring", "Sendok & piring"),
+    KARTU_GAMBAR("kartu_gambar", "Kartu bergambar"),
+    BUKU_CERITA("buku_cerita", "Buku cerita bergambar"),
+    BOLA("bola", "Bola"),
+    BALOK_PUZZLE("balok_puzzle", "Balok susun / puzzle"),
+    KRAYON("krayon", "Krayon / pensil warna"),
+    BERAS_BIJI("beras_biji", "Beras / biji-bijian"),
+    BOTOL_TUTUP("botol_tutup", "Botol & tutup"),
+    MAINAN_BUNYI("mainan_bunyi", "Mainan bunyi");
+
+    companion object {
+        fun fromDb(value: String): TeachingAid? = entries.firstOrNull { it.dbValue == value }
+
+        /**
+         * Stored values turned into display labels.
+         *
+         * An unrecognised value is passed through as-is rather than dropped. If this list ever
+         * changes, tasks created under the old list keep showing their aid instead of silently
+         * losing it.
+         */
+        fun labelsOf(values: List<String>?): List<String> =
+            values.orEmpty().map { fromDb(it)?.label ?: it }
+    }
+}
+
 /** Media kind, mapped to the Postgres enum `media_kind`. */
 enum class MediaKind(val dbValue: String) {
     IMAGE("image"),
@@ -43,6 +80,8 @@ data class TaskInsert(
     @SerialName("recurrence_interval") val recurrenceInterval: Int? = null,
     @SerialName("starts_on") val startsOn: String? = null,
     @SerialName("ends_on") val endsOn: String? = null,
+    /** [TeachingAid.dbValue] entries; null or empty when the task needs no aids. */
+    @SerialName("alat_bantu") val alatBantu: List<String>? = null,
 )
 
 /** Update payload used to stop a recurring program. */
@@ -74,7 +113,11 @@ data class Task(
     @SerialName("starts_on") val startsOn: String? = null,
     @SerialName("ends_on") val endsOn: String? = null,
     @SerialName("stopped_at") val stoppedAt: String? = null,
+    @SerialName("alat_bantu") val alatBantu: List<String>? = null,
 ) {
+    /** Display labels for the aids, with unknown stored values passed through untouched. */
+    val alatBantuLabels: List<String> get() = TeachingAid.labelsOf(alatBantu)
+
     val recurrenceType: RecurrenceType get() = RecurrenceType.fromDb(recurrence)
 
     val isRecurring: Boolean get() = recurrenceType != RecurrenceType.ONCE

@@ -30,6 +30,11 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 *   **Notifications:** Server-side triggers are defined, but real-time client-side handling and push notifications (FCM) are pending.
 *   **Presensi (Attendance):** Relawan vertical slice for logging home visits.
 
+### ⚠️ Pending Deployment Step
+*   **Migration `0004_alat_bantu.sql` has NOT been run.** Once the branch merges, creating a program
+    ajar sends an `alat_bantu` column that does not exist yet, so **task creation will fail** until
+    the migration is applied. Run it before merging, as with `0003`.
+
 ### ❌ Not Built / Deferred
 *   **Admin Dashboard:** Progress recaps for donors and attendance overviews.
 *   **Data Export:** Exporting progress reports to CSV/PDF.
@@ -84,6 +89,49 @@ sight, which defeats the point of showing them at all.
     carries its own `occurrence_date`, so no rule expansion and no date window are needed at all.
 
 ## Change Log
+
+### [2026-08-16] - Teaching Aids ("Alat Bantu") on a Program Ajar
+* **What changed:** A task can now carry several household teaching aids. The volunteer picks them
+    from a fixed list when creating the program; the parent sees them read-only on the task detail
+    screen. This resolves the long-ambiguous "kolom media ajar" request, finally explained by a
+    teammate: *a task may have several aids, make it a dropdown, the volunteer fills it, and the
+    item list is fixed.*
+* **The list is grounded in this project, not a generic therapy catalogue.** Every entry is a cheap
+    or already-owned household item, because the families served are low-income and clinical
+    equipment would put the homework out of reach. Several trace directly to the app's own
+    material — fabric textures and vowel practice are its example tasks, and "starting to hold a
+    spoon" is the README's example of progress.
+* **Stored as `text[]`, not a Postgres enum.** The option list lives as an app constant, so an enum
+    would make adding one item need both an APK release *and* a migration; `text[]` needs only the
+    release. Array columns are already proven here by `recurrence_days smallint[]`.
+* **Unknown stored values are displayed, not dropped.** `TeachingAid.labelsOf` passes through any
+    value it does not recognise, so if the list changes in a later release, tasks saved under the
+    old list keep showing their aid rather than silently losing it.
+* **Verified:** `assembleDebug` green; 41 unit tests pass (9 new). The pass-through test was also
+    run against a naive `mapNotNull` implementation and **failed** as intended, so it genuinely
+    guards that behaviour rather than passing either way.
+* **Not yet verified:** all runtime behaviour, and migration `0004` has not been applied.
+
+### [2026-08-16] - Repo Cleanup + First Observed Stop-Hook Firing
+* **What changed:** No code. Local checkout moved back to `master` (`fea4f77`) and the merged
+    branches were deleted locally and on GitHub: `test/gabungan`, `feat/kemandirian-durasi`,
+    `fix/urutan-tugas-selesai`.
+* **Safety check worth recording:** `git branch -d` refused to delete `test/gabungan`, because the
+    local merge commit is not an ancestor of `master` — GitHub created its own merge commits for
+    PRs #13/#14. Before forcing with `-D`, both Change Log entries that had conflicted during that
+    local merge were confirmed present in `master` (only their order differs). Nothing was lost.
+* **The Stop hook fired for the first time** — previously listed as "not yet verified". It works.
+* **…and it was a false positive, exactly as predicted.** Nothing was written this turn; `git pull`
+    rewrote file mtimes, and `stop_gate.py` compares mtimes. Both `0003_kemandirian_durasi.sql` and
+    `project_status.md` landed in the same second (`03:02:58`) from that one pull, differing only
+    by milliseconds — enough to trip the gate.
+* **If this becomes annoying**, the fix is to compare against `git diff --name-only` /
+    `git status --porcelain` rather than mtimes, so pure git operations stop triggering it. Left
+    alone for now: the `stop_hook_active` guard already caps it at one nudge per turn.
+* **Verified:** Branch state after cleanup — 2 local branches, 4 remote, working tree clean,
+    `master` at `fea4f77`.
+* **Not yet verified:** Still nothing runtime. The four merged changes (independence scale,
+    duration, "Media Ajar" label, completed-task ordering) have never been exercised on a device.
 
 ### [2026-08-16] - Finished Occurrences Now Sort Below Unfinished Ones
 * **The problem:** `TaskOccurrences.build` sorted by date → priority → title, ignoring `isDone`.

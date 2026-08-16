@@ -28,7 +28,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -67,6 +72,7 @@ import com.antoniusindra.sipatokkong.core.recurrence.RecurrenceType
 import com.antoniusindra.sipatokkong.core.recurrence.labelId
 import com.antoniusindra.sipatokkong.data.model.MediaKind
 import com.antoniusindra.sipatokkong.data.model.TaskPriority
+import com.antoniusindra.sipatokkong.data.model.TeachingAid
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -193,6 +199,13 @@ fun CreateTaskScreen(
                     )
                 }
             }
+
+            // ---- Alat bantu ----
+            SectionLabel("Alat Bantu (opsional)")
+            AlatBantuDropdown(
+                selected = ui.alatBantu,
+                onToggle = viewModel::onAlatBantuToggle,
+            )
 
             // ---- Pola pengulangan ----
             SectionLabel("Pola Pengulangan")
@@ -342,6 +355,71 @@ private fun ToolbarButton(icon: ImageVector, contentDescription: String, onClick
         colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Icon(icon, contentDescription = contentDescription, modifier = Modifier.size(20.dp))
+    }
+}
+
+/**
+ * Multi-select for teaching aids.
+ *
+ * A dropdown rather than a row of chips like Prioritas: twelve options as chips would eat far too
+ * much vertical space on a phone. Picks are echoed as removable chips underneath so the volunteer
+ * can see the selection without reopening the menu.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun AlatBantuDropdown(
+    selected: Set<TeachingAid>,
+    onToggle: (TeachingAid) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val summary = when (selected.size) {
+        0 -> "Pilih alat bantu"
+        1 -> selected.first().label
+        else -> "${selected.size} alat bantu dipilih"
+    }
+
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = summary,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Alat Bantu") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            TeachingAid.entries.forEach { aid ->
+                DropdownMenuItem(
+                    text = { Text(aid.label) },
+                    // Menu stays open: picking several aids in one go is the normal case.
+                    onClick = { onToggle(aid) },
+                    leadingIcon = {
+                        Checkbox(checked = aid in selected, onCheckedChange = { onToggle(aid) })
+                    },
+                )
+            }
+        }
+    }
+
+    if (selected.isNotEmpty()) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TeachingAid.entries.filter { it in selected }.forEach { aid ->
+                InputChip(
+                    selected = true,
+                    onClick = { onToggle(aid) },
+                    label = { Text(aid.label) },
+                    trailingIcon = {
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = "Hapus ${aid.label}",
+                            modifier = Modifier.size(16.dp),
+                        )
+                    },
+                )
+            }
+        }
     }
 }
 

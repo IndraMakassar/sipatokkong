@@ -8,6 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -141,6 +143,7 @@ fun TaskDetailScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DetailBody(
     modifier: Modifier,
@@ -171,6 +174,30 @@ private fun DetailBody(
                 Text(tugas.judul, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Text("Instruksi", fontWeight = FontWeight.SemiBold, color = MutedText)
                 RichTextDisplay(tugas.instruksi ?: "-")
+
+                // Read-only: the volunteer chooses the aids, the parent only needs to know what
+                // to have ready. Hidden entirely when there are none, so tasks that need no aid
+                // don't show an empty heading.
+                val aids = tugas.alatBantuLabels
+                if (aids.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text("Alat Bantu", fontWeight = FontWeight.SemiBold, color = MutedText)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        aids.forEach { label ->
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = MaterialTheme.shapes.small,
+                            ) {
+                                Text(
+                                    label,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "⏱ Prioritas ${priorityLabel(tugas.priorityLevel)}" +
