@@ -90,6 +90,25 @@ sight, which defeats the point of showing them at all.
 
 ## Change Log
 
+### [2026-08-16] - Fix: Wrapped Aid Chips Were Touching
+* **The bug:** Both `FlowRow`s added for teaching aids omitted `verticalArrangement`. `FlowRow`
+    only spaces chips horizontally, so once they wrapped onto a second line the rows sat flush
+    against each other at 0dp. With twelve aids and labels as long as "Buku cerita bergambar",
+    wrapping is the normal case, not an edge case.
+* **The answer was already in this repo.** `CreateFeedbackScreen` has set
+    `verticalArrangement = Arrangement.spacedBy(8.dp)` on its `FlowRow` all along; the new code
+    simply failed to follow an established pattern. Both now use the same values, so the aid chips
+    and the "kendala" chips read alike.
+* **Also:** chip padding went from `10.dp × 6.dp` to `12.dp × 8.dp` — `labelMedium` at 6dp vertical
+    sat tight against the chip edge.
+* **Fixed in both places,** including the volunteer's selection chips. That screen had the
+    identical defect and nobody had reported it yet, most likely because it had not been opened
+    with several aids selected.
+* **Verified:** `assembleDebug` green, 41 tests still pass, and all three `FlowRow`s in the
+    codebase now declare `verticalArrangement`.
+* **Not yet verified:** how it actually looks. This is a layout change and no screen was seen from
+    this machine.
+
 ### [2026-08-16] - Teaching Aids ("Alat Bantu") on a Program Ajar
 * **What changed:** A task can now carry several household teaching aids. The volunteer picks them
     from a fixed list when creating the program; the parent sees them read-only on the task detail

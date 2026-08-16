@@ -404,7 +404,12 @@ private fun AlatBantuDropdown(
     }
 
     if (selected.isNotEmpty()) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Same omission as the parent screen had: without verticalArrangement, wrapped chip rows
+        // touch. Selecting a few aids makes this wrap immediately.
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             TeachingAid.entries.filter { it in selected }.forEach { aid ->
                 InputChip(
                     selected = true,

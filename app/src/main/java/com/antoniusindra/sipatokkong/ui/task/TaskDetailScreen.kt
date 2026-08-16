@@ -182,7 +182,13 @@ private fun DetailBody(
                 if (aids.isNotEmpty()) {
                     Spacer(Modifier.height(4.dp))
                     Text("Alat Bantu", fontWeight = FontWeight.SemiBold, color = MutedText)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // verticalArrangement matters: without it, chips that wrap onto a second
+                    // line sit flush against the one above. Same values as the FlowRow in
+                    // CreateFeedbackScreen so both read alike.
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         aids.forEach { label ->
                             Surface(
                                 color = MaterialTheme.colorScheme.surfaceVariant,
@@ -191,7 +197,7 @@ private fun DetailBody(
                                 Text(
                                     label,
                                     style = MaterialTheme.typography.labelMedium,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                 )
                             }
                         }
