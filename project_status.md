@@ -90,6 +90,33 @@ sight, which defeats the point of showing them at all.
 
 ## Change Log
 
+### [2026-08-16] - Feature: Volunteers Can Add Their Own Teaching Aids
+* **The gap:** `TeachingAid` is an app constant, so an aid missing from the twelve built-ins could
+    only be added by editing code and shipping a new APK — unworkable for something a therapist
+    finds in the field.
+* **Most of the work was already done.** `alat_bantu` is `text[]` rather than an enum, and
+    `labelsOf` passes unrecognised values through untouched, so a volunteer-typed aid stores and
+    renders correctly with **zero changes to the parent's screen**.
+* **What was added:** the aid dropdown is now a searchable combobox. Typing filters the list;
+    already-picked aids are pinned above the results so a filter never hides the selection being
+    built; a `Tambah "…"` row commits new text. Aids used before are offered on the next task, so
+    they are typed once, not every time.
+* **Guard against a fragmented list:** `TeachingAid.resolve` folds a retyped built-in back onto its
+    stored value ("Cermin"/"CERMIN"/"cermin" → `cermin`), and typed text is trimmed, its inner
+    whitespace collapsed, and capped at 40 characters.
+* **Known limit — suggestions do not travel between volunteers.** `tugas_select` grants a volunteer
+    only `relawan_id = auth.uid()`, so the suggestion query sees only their own history. Sharing
+    aids across the team would need a new RLS policy or a shared catalogue table; neither is built.
+* **Two self-contradictions caught before landing:** the query was being cleared on every selection,
+    which made the pinned section pointless and snapped the menu from a few rows to twelve mid-tap —
+    it now survives a pick. And the anchor had to become `PrimaryEditable`: with
+    `PrimaryNotEditable` the popup takes IME focus and the keyboard closes on every keystroke.
+* **Tests:** 79 total, up from 41. Three were verified by reverting the code under test and
+    confirming the failure — `resolve`'s built-in folding, the pinned selection, and case-insensitive
+    suggestion dedup.
+* **Not verified:** anything on-screen. The layout, keyboard behaviour and menu height are untested
+    on a device.
+
 ### [2026-08-16] - Fix: Wrapped Aid Chips Were Touching
 * **The bug:** Both `FlowRow`s added for teaching aids omitted `verticalArrangement`. `FlowRow`
     only spaces chips horizontally, so once they wrapped onto a second line the rows sat flush

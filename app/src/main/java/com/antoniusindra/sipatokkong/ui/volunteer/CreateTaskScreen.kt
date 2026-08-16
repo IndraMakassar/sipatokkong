@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -19,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.FormatBold
@@ -39,6 +41,7 @@ import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -66,7 +69,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import com.antoniusindra.sipatokkong.core.recurrence.RecurrenceType
 import com.antoniusindra.sipatokkong.core.recurrence.labelId
@@ -203,8 +211,13 @@ fun CreateTaskScreen(
             // ---- Alat bantu ----
             SectionLabel("Alat Bantu (opsional)")
             AlatBantuDropdown(
-                selected = ui.alatBantu,
+                query = ui.aidQuery,
+                selected = ui.aidSelected,
+                matches = ui.aidMatches,
+                addable = ui.addableAid,
                 onToggle = viewModel::onAlatBantuToggle,
+                onQueryChange = viewModel::onAidQueryChange,
+                onAddTyped = viewModel::onAddTypedAid,
             )
 
             // ---- Pola pengulangan ----
@@ -359,46 +372,98 @@ private fun ToolbarButton(icon: ImageVector, contentDescription: String, onClick
 }
 
 /**
- * Multi-select for teaching aids.
+ * Searchable multi-select for teaching aids, which also accepts an aid the volunteer types.
  *
- * A dropdown rather than a row of chips like Prioritas: twelve options as chips would eat far too
- * much vertical space on a phone. Picks are echoed as removable chips underneath so the volunteer
- * can see the selection without reopening the menu.
+ * A dropdown rather than a row of chips like Prioritas: the options would eat far too much vertical
+ * space on a phone. Typing filters the list, but the already-picked aids are pinned above the
+ * results and stay visible whatever the filter — otherwise searching would hide the selection the
+ * volunteer is building. Picks are echoed as removable chips underneath.
+ *
+ * [selected], [matches] and [addable] are derived in the ViewModel so the menu's contents are unit
+ * tested rather than only inspectable by eye.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun AlatBantuDropdown(
-    selected: Set<TeachingAid>,
-    onToggle: (TeachingAid) -> Unit,
+    query: String,
+    selected: List<String>,
+    matches: List<String>,
+    addable: String?,
+    onToggle: (String) -> Unit,
+    onQueryChange: (String) -> Unit,
+    onAddTyped: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val summary = when (selected.size) {
-        0 -> "Pilih alat bantu"
-        1 -> selected.first().label
-        else -> "${selected.size} alat bantu dipilih"
-    }
+    val menuScroll = rememberScrollState()
+
+    // After scrolling down the full list, a new keystroke leaves a two-row menu parked mid-scroll.
+    LaunchedEffect(query) { menuScroll.scrollTo(0) }
 
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
         OutlinedTextField(
-            value = summary,
-            onValueChange = {},
-            readOnly = true,
+            value = query,
+            // Typing never routes through onExpandedChange, so the menu must be reopened by hand.
+            onValueChange = { expanded = true; onQueryChange(it) },
             label = { Text("Alat Bantu") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            placeholder = { Text("Cari, atau ketik alat baru") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.Sentences,
+                imeAction = ImeAction.Done,
+            ),
+            keyboardActions = KeyboardActions(onDone = { if (addable != null) onAddTyped() }),
+            trailingIcon = {
+                // Its own anchor: with an editable field the chevron is what toggles the menu,
+                // since tapping the text itself has to place the cursor instead.
+                ExposedDropdownMenuDefaults.TrailingIcon(
+                    expanded = expanded,
+                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.SecondaryEditable),
+                )
+            },
             modifier = Modifier
                 .fillMaxWidth()
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
         )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            TeachingAid.entries.forEach { aid ->
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            scrollState = menuScroll,
+            // Otherwise the height is whatever space the window happens to have, which with the
+            // keyboard up can be less than the pinned selection alone.
+            modifier = Modifier.heightIn(max = 280.dp),
+        ) {
+            // Above the pinned selection on purpose. Once a few aids are picked, the pinned rows
+            // alone can fill the menu, and this is the row the volunteer is typing towards.
+            if (addable != null) {
                 DropdownMenuItem(
-                    text = { Text(aid.label) },
-                    // Menu stays open: picking several aids in one go is the normal case.
-                    onClick = { onToggle(aid) },
-                    leadingIcon = {
-                        Checkbox(checked = aid in selected, onCheckedChange = { onToggle(aid) })
+                    text = {
+                        Text(
+                            "Tambah \"$addable\" sebagai alat bantu baru",
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     },
+                    onClick = onAddTyped,
+                    // Leading slot left empty so this does not line up with the checkbox column
+                    // and get read as just another aid.
+                    trailingIcon = {
+                        Icon(
+                            Icons.Filled.Add,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    },
+                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
                 )
+                HorizontalDivider()
+            }
+            if (selected.isNotEmpty()) {
+                AidMenuHeader("TERPILIH")
+                selected.forEach { AidMenuRow(it, checked = true, onToggle = onToggle) }
+                HorizontalDivider()
+            }
+            matches.forEach { AidMenuRow(it, checked = false, onToggle = onToggle) }
+            if (selected.isEmpty() && matches.isEmpty() && addable == null) {
+                AidMenuHeader("Tidak ada alat bantu yang cocok")
             }
         }
     }
@@ -410,15 +475,16 @@ private fun AlatBantuDropdown(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            TeachingAid.entries.filter { it in selected }.forEach { aid ->
+            selected.forEach { value ->
+                val label = TeachingAid.labelOf(value)
                 InputChip(
                     selected = true,
-                    onClick = { onToggle(aid) },
-                    label = { Text(aid.label) },
+                    onClick = { onToggle(value) },
+                    label = { Text(label) },
                     trailingIcon = {
                         Icon(
                             Icons.Filled.Close,
-                            contentDescription = "Hapus ${aid.label}",
+                            contentDescription = "Hapus $label",
                             modifier = Modifier.size(16.dp),
                         )
                     },
@@ -426,6 +492,39 @@ private fun AlatBantuDropdown(
             }
         }
     }
+}
+
+/**
+ * A non-clickable section label inside the aid menu.
+ *
+ * A plain Text, not a disabled DropdownMenuItem: that would cost a 48dp row, render at 38% alpha,
+ * and make TalkBack announce a dead control. Padding matches [ExposedDropdownMenuDefaults
+ * .ItemContentPadding] so headers line up with the rows under them.
+ */
+@Composable
+private fun AidMenuHeader(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .semantics { heading() },
+    )
+}
+
+/** One checkable aid row. The menu stays open: picking several aids in one go is the normal case. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AidMenuRow(value: String, checked: Boolean, onToggle: (String) -> Unit) {
+    DropdownMenuItem(
+        text = { Text(TeachingAid.labelOf(value)) },
+        onClick = { onToggle(value) },
+        // onCheckedChange = null: the row already handles the click, so the checkbox is decorative
+        // and TalkBack announces one control instead of two overlapping ones.
+        leadingIcon = { Checkbox(checked = checked, onCheckedChange = null) },
+        contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+    )
 }
 
 @Composable

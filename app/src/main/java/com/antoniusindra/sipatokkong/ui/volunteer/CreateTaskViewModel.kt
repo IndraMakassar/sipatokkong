@@ -39,7 +39,12 @@ data class CreateTaskUiState(
     val mediaUri: String? = null,
     val mediaName: String? = null,
     val mediaKind: MediaKind? = null,
-    val alatBantu: Set<TeachingAid> = emptySet(),
+    /** Stored values, not enums: a volunteer-typed aid has no [TeachingAid] to represent it. */
+    val alatBantu: Set<String> = emptySet(),
+    /** What the volunteer is typing into the aid box — both a filter and a new-aid draft. */
+    val aidQuery: String = "",
+    /** Aids used on earlier tasks, offered alongside the built-ins. */
+    val aidSuggestions: List<String> = emptyList(),
     // ---- recurrence ----
     val recurrence: RecurrenceType = RecurrenceType.ONCE,
     val daysOfWeek: Set<DayOfWeek> = emptySet(),
@@ -55,6 +60,40 @@ data class CreateTaskUiState(
         get() = children.firstOrNull { it.id == selectedAnakId }?.nama
 
     val isRecurring: Boolean get() = recurrence != RecurrenceType.ONCE
+
+    // ---- aid menu ----
+    // Derived here rather than in the composable so the menu's contents can be unit-tested.
+
+    /** Everything the menu can offer: the built-ins, plus past and session-added custom aids. */
+    val aidOptions: List<String>
+        get() {
+            val custom = (aidSuggestions + alatBantu.filter { TeachingAid.matchBuiltIn(it) == null })
+                .distinctBy { it.lowercase() }
+                .sortedBy { it.lowercase() }
+            return TeachingAid.entries.map { it.dbValue } + custom
+        }
+
+    /** Picked aids, pinned above the results so a filter never hides what is already chosen. */
+    val aidSelected: List<String> get() = TeachingAid.sortedForStorage(alatBantu)
+
+    /** Unpicked options matching the query. While a query is present, the rest stay hidden. */
+    val aidMatches: List<String>
+        get() {
+            val q = aidQuery.trim()
+            return aidOptions.filter { it !in alatBantu }
+                .filter { q.isEmpty() || TeachingAid.labelOf(it).contains(q, ignoreCase = true) }
+        }
+
+    /** The typed text, when it names something the menu does not already offer. */
+    val addableAid: String?
+        get() {
+            val clean = TeachingAid.normalizeCustom(aidQuery) ?: return null
+            val known = aidOptions.any {
+                it.equals(clean, ignoreCase = true) ||
+                    TeachingAid.labelOf(it).equals(clean, ignoreCase = true)
+            }
+            return clean.takeUnless { known }
+        }
 }
 
 class CreateTaskViewModel(
@@ -71,6 +110,22 @@ class CreateTaskViewModel(
 
     init {
         loadChildren()
+        loadAidSuggestions()
+    }
+
+    /**
+     * Fills the aid menu with what this volunteer used before.
+     *
+     * Failure is swallowed on purpose: suggestions are a convenience, not a requirement. Surfacing
+     * an error here would block a form the volunteer can still fill in with the twelve built-ins.
+     */
+    private fun loadAidSuggestions() {
+        viewModelScope.launch {
+            runCatching { taskRepository.aidsUsedByCurrentVolunteer() }
+                .onSuccess { used ->
+                    _uiState.update { it.copy(aidSuggestions = TeachingAid.suggestionsFrom(used)) }
+                }
+        }
     }
 
     private fun loadChildren() {
@@ -102,9 +157,29 @@ class CreateTaskViewModel(
     fun onPriorityChange(p: TaskPriority) = _uiState.update { it.copy(priority = p) }
     fun onDeadlineChange(d: LocalDate?) = _uiState.update { it.copy(deadline = d) }
 
-    fun onAlatBantuToggle(aid: TeachingAid) = _uiState.update {
-        val next = if (aid in it.alatBantu) it.alatBantu - aid else it.alatBantu + aid
+    /**
+     * Adds or removes one aid.
+     *
+     * The query deliberately survives: it is a filter, not a draft. Clearing it here would snap the
+     * menu from a few rows back to the full list mid-tap — and would defeat the pinned selection,
+     * which exists precisely so a filter can stay applied while several aids are picked.
+     */
+    fun onAlatBantuToggle(value: String) = _uiState.update {
+        val next = if (value in it.alatBantu) it.alatBantu - value else it.alatBantu + value
         it.copy(alatBantu = next)
+    }
+
+    fun onAidQueryChange(v: String) = _uiState.update {
+        it.copy(aidQuery = v.trimStart().take(TeachingAid.MAX_CUSTOM_LENGTH))
+    }
+
+    /**
+     * Commits the typed text as an aid. [TeachingAid.resolve] folds a retyped built-in back onto
+     * its stored value, so typing "Cermin" selects the existing option instead of adding a twin.
+     */
+    fun onAddTypedAid() = _uiState.update {
+        val value = TeachingAid.resolve(it.aidQuery) ?: return@update it.copy(aidQuery = "")
+        it.copy(alatBantu = it.alatBantu + value, aidQuery = "")
     }
 
     fun onRecurrenceChange(type: RecurrenceType) = _uiState.update {
@@ -211,10 +286,10 @@ class CreateTaskViewModel(
                             s.endsOn?.format(DateTimeFormatter.ISO_LOCAL_DATE)
                         } else null,
                         // Declaration order, not tap order, so the parent always sees a stable list.
-                        alatBantu = TeachingAid.entries
-                            .filter { it in s.alatBantu }
-                            .map { it.dbValue }
-                            .ifEmpty { null },
+                        // Leftover text in the search box is NOT committed: the box stays filled
+                        // while picking, so "bol" left behind after tapping Bola is a spent filter,
+                        // not an aid the volunteer meant to add.
+                        alatBantu = TeachingAid.sortedForStorage(s.alatBantu).ifEmpty { null },
                     )
                 )
                 _uiState.update { it.copy(isSubmitting = false, isSuccess = true) }
