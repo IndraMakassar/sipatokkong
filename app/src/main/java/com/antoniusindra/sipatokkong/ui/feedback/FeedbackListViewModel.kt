@@ -25,9 +25,8 @@ class FeedbackListViewModel(private val feedbackRepository: FeedbackRepository) 
     private val _uiState = MutableStateFlow(FeedbackListUiState())
     val uiState: StateFlow<FeedbackListUiState> = _uiState.asStateFlow()
 
-    init {
-        refresh()
-    }
+    // No init { refresh() }: the screen now drives loading via LaunchedEffect so the list also
+    // reloads on re-entry. Doing both would mean two round-trips on every visit.
 
     fun refresh() {
         viewModelScope.launch {

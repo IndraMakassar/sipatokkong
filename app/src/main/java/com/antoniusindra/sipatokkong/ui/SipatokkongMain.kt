@@ -4,9 +4,7 @@ import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -18,7 +16,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -44,6 +41,8 @@ import com.antoniusindra.sipatokkong.ui.notifications.ParentNotificationScreen
 import com.antoniusindra.sipatokkong.ui.task.TaskDetailScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.CreateTaskScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.ProgramListScreen
+import com.antoniusindra.sipatokkong.ui.volunteer.VolunteerHomeScreen
+import com.antoniusindra.sipatokkong.ui.volunteer.VolunteerHomeViewModel
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -66,7 +65,7 @@ fun SipatokkongMain() {
                 val destination = when (state.profile.role) {
                     UserRole.ADMIN -> "admin_home"
                     UserRole.ORANGTUA -> "orangtua_home"
-                    else -> "user_home"
+                    UserRole.RELAWAN -> "relawan_home"
                 }
                 navController.navigate(destination) {
                     popUpTo(0) { inclusive = true }
@@ -259,12 +258,6 @@ fun SipatokkongMain() {
                         onCompose = { navController.navigate("create_feedback") },
                     )
                 }
-                composable("volunteer_feedback_list") {
-                    FeedbackListScreen(
-                        title = "Feedback Orang Tua",
-                        onOpenThread = { id -> navController.navigate("feedback_thread/$id") },
-                    )
-                }
                 composable("create_feedback") {
                     CreateFeedbackScreen(onBack = { navController.popBackStack() })
                 }
@@ -274,38 +267,34 @@ fun SipatokkongMain() {
                         FeedbackThreadScreen(feedbackId = id, onBack = { navController.popBackStack() })
                     }
                 }
-                composable("user_home") {
+                composable("relawan_home") {
                     val signedInState = sessionState as? SessionManager.State.SignedIn
                     if (signedInState != null) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = "Welcome, ${signedInState.profile.fullName} (${signedInState.profile.role})")
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Button(onClick = { navController.navigate("create_program_ajar") }) {
-                                    Text("Buat Program Ajar")
+                        val volunteerVm: VolunteerHomeViewModel =
+                            viewModel(factory = VolunteerHomeViewModel.Factory)
+                        val volunteerState by volunteerVm.uiState.collectAsState()
+                        // Re-runs on re-entry, so the counts pick up a program just created.
+                        LaunchedEffect(Unit) { volunteerVm.refresh() }
+                        VolunteerHomeScreen(
+                            profile = signedInState.profile,
+                            ui = volunteerState,
+                            onCreateProgram = { navController.navigate("create_program_ajar") },
+                            onOpenPrograms = { navController.navigate("volunteer_programs") },
+                            onOpenFeedbackThread = { id -> navController.navigate("feedback_thread/$id") },
+                            onRetry = { volunteerVm.refresh() },
+                            onLogout = {
+                                scope.launch {
+                                    sessionManager.signOut()
                                 }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Button(onClick = { navController.navigate("volunteer_programs") }) {
-                                    Text("Program Ajar Saya")
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Button(onClick = { navController.navigate("volunteer_feedback_list") }) {
-                                    Text("Feedback Orang Tua")
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Button(onClick = {
-                                    scope.launch {
-                                        sessionManager.signOut()
-                                    }
-                                }) {
-                                    Text("Logout")
-                                }
-                            }
-                        }
+                            },
+                        )
                     }
                 }
                 composable("volunteer_programs") {
-                    ProgramListScreen(onBack = { navController.popBackStack() })
+                    ProgramListScreen(
+                        onBack = { navController.popBackStack() },
+                        onCreateProgram = { navController.navigate("create_program_ajar") },
+                    )
                 }
                 composable("create_program_ajar") {
                     CreateTaskScreen(onBack = { navController.popBackStack() })

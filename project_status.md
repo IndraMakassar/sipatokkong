@@ -85,6 +85,56 @@ sight, which defeats the point of showing them at all.
 
 ## Change Log
 
+### [2026-08-16] - Volunteer Screens: A Real Home, and Six Flow Fixes
+* **The volunteer had no home screen.** It was an unstyled `Box` of four buttons written inline in
+    the nav graph, on a route named `user_home` reached through the role `when`'s `else` branch. It
+    was also the only screen left showing English copy and a raw enum: `Welcome, Kevin (RELAWAN)`.
+    Replaced with `VolunteerHomeScreen`, built on the parent screens' visual language — grey canvas,
+    flat teal-titled app bar, gradient summary card, white 16dp cards at 2dp elevation.
+* **Volunteers now have a bottom nav** (Beranda / Feedback / Profil), like parents. This also closes
+    a dead end: `FeedbackListScreen` has no `navigationIcon`, so as a pushed destination the
+    volunteer could only leave it with the system back gesture. As a tab, that cannot happen.
+* **`ParentProfileScreen` → `ProfileScreen`.** It turned out to be role-neutral apart from a
+    hardcoded "Orang Tua" label and the `familyStatus` row, so it now takes `roleLabel` and
+    `showFamilyStatus` and volunteers reuse it instead of getting a second near-identical screen.
+* **`ProgramListScreen` restyled** to match: white elevated cards, 48dp icon tile, shared
+    `StatusChip` (imported rather than copied — it is `internal` and this is one module, so no
+    fifth badge variant was created). Cards now expand in place to show instruction and priority —
+    **priority was collected on the create form and then never displayed anywhere.**
+* **Six flow defects fixed:**
+    1. A failed "Hentikan Program" shared one `error` field with load failures, so it replaced the
+       whole list with a full-screen red message. Now a separate `actionError` banner; list stays.
+    2. No retry anywhere — added `ErrorRetry` and wired it in.
+    3. `CreateTaskViewModel.retryLoadChildren()` existed but had no caller at all. Wired.
+    4. `ProgramListViewModel` had `init { refresh() }` *and* a screen `LaunchedEffect` — two round
+       trips per entry, the exact anti-pattern `ParentHomeViewModel` documents. Removed the init.
+    5. `FeedbackListScreen` had no `LaunchedEffect` at all, so it showed stale data after replying
+       to a thread. Added, and its init-load removed.
+    6. Its empty text was parent-voiced ("Belum ada catatan/feedback.") on a screen titled
+       "Feedback Orang Tua". Now a parameter.
+* **New shared components:** `ui/components/EmptyState.kt` and `ErrorRetry.kt`. `EmptyState` is the
+    good icon+headline+subtext shape that was locked inside `ParentNotificationScreen` as a private
+    composable; that screen now uses the shared one, so this removes a duplicate rather than adding.
+* **A test caught its own weakness.** The first `summary` test passed with the branch order
+    reversed, because it never exercised the case where both children and programs are empty — the
+    only case where the order matters. Rewritten. Separately, `!isStopped` in the active-program
+    filter proved redundant: `RecurrenceRule.effectiveEnd` already folds `stopped_at` into the end
+    date, so `isFinished` covers it. Dropped the clause.
+* **Tests:** 43, up from 32. Both derived-state rules verified by reverting the code and confirming
+    the failure.
+* **Not verified:** anything on screen. Layout, colours and spacing are untested on a device.
+* **Debt deliberately left, so it is not forgotten:**
+    * `MainActivity` uses `SipatokkongTheme { }`, and `dynamicColor` defaults to `true` — so on
+      Android 12+ `MaterialTheme.colorScheme` comes from the user's *wallpaper* and `BrandTeal` is
+      never applied. Parent screens (and now the volunteer ones) dodge this by importing brand
+      colours directly; **admin screens do not, and render in arbitrary hues.** Flipping the flag is
+      one line but changes every screen, so it needs a deliberate decision.
+    * `SectionLabel`, `DeadlineField`/`DateField` and `ChildDropdown`/`OptionDropdown` are still
+      duplicated between `ui/volunteer/` and `ui/admin/AdminFormComponents.kt`.
+    * `CreateTaskScreen` is still 677 lines, the longest file in the app.
+    * Dark mode remains unsupported: `darkTheme` defaults to `false`, `DarkColorScheme` is still the
+      template purple, and `Color.White`/`Color.Black` are hardcoded in ~10 places.
+
 ### [2026-08-16] - Finished Occurrences Now Sort Below Unfinished Ones
 * **The problem:** `TaskOccurrences.build` sorted by date → priority → title, ignoring `isDone`.
     Inside a day, a **completed high-priority** task therefore sat above an **unfinished
