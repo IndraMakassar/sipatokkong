@@ -7,7 +7,8 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 
 ### ✅ Built / Completed
 *   **Infrastructure:** Supabase project setup, database schema, RLS policies, and storage bucket
-    configurations. Migrations `0001` through `0004` are all applied to the live project.
+    configurations. Migrations `0001` through `0004` are applied to the live project.
+    **`0005` (presensi unique index) is written but NOT yet applied** — apply it before merging.
 *   **Authentication:** Phone Number + PIN login flow mapped to Supabase Auth. Role-based routing (Admin, Parent, Volunteer).
 *   **Admin Features:**
     *   Create Parent/Volunteer accounts (via `noSessionClient` to preserve admin session).
@@ -23,19 +24,29 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
     *   Create Task (Program Ajar) with media upload and rich text instructions.
     *   Recurring programs (daily / weekly / monthly / every-N-days) with an end date, plus a
         "Program Ajar Saya" screen for stopping a running program.
+    *   Presensi: "Catat Kunjungan" form (child, date, session note, mandatory compressed proof
+        photo) plus a Presensi tab listing the volunteer's own visit history.
+*   **Media:** Any photo/video (demo tugas, parent documentation, presensi) can be downloaded to
+    the phone's gallery — `Pictures/Sipatokkong` and `Movies/Sipatokkong`.
 *   **Communication:** Feedback threads for parent-volunteer interaction.
+*   **Admin Reporting:** Rekap Absensi Relawan — visits per volunteer over a date range, with
+    volunteers who logged nothing shown at zero.
 
 ### 🚧 In Progress / Partially Built
-*   **Media Compression:** Integration of client-side compressors into the upload pipeline.
+*   **Media Compression:** Wired up for the presensi photo upload only (`core/media/ImageCompressor`).
+    The `tugas-demo` and `dokumentasi` uploads still send raw bytes; `LightCompressor` (video) is
+    still unused.
 *   **Notifications:** Server-side triggers are defined, but real-time client-side handling and push notifications (FCM) are pending.
-*   **Presensi (Attendance):** Relawan vertical slice for logging home visits.
+    The `notif_type` value `'presensi'` remains declared but unused — no trigger writes it.
 
 
 ### ❌ Not Built / Deferred
-*   **Admin Dashboard:** Progress recaps for donors and attendance overviews.
+*   **Admin Dashboard:** Progress recaps for donors. (Attendance overview is built — see above.)
 *   **Data Export:** Exporting progress reports to CSV/PDF.
 *   **Scheduled Reminders:** Automated weekly reminders for parents.
 *   **Offline Mode:** WorkManager queue for uploads during intermittent connectivity.
+*   **In-app video playback:** no media3/ExoPlayer. A demo video is watched by downloading it and
+    opening it in the phone's gallery player.
 
 ## Domain Constraints
 *   **Low Literacy:** UI must be visual-heavy with clear, simple Bahasa Indonesia labels. Mandatory demo videos/photos for tasks.
@@ -85,6 +96,92 @@ sight, which defeats the point of showing them at all.
     carries its own `occurrence_date`, so no rule expansion and no date window are needed at all.
 
 ## Change Log
+
+### [2026-08-26] - Semua Media Bisa Diunduh ke Galeri HP
+* **Yang diminta:** setiap gambar/video bisa diunduh dan tersimpan di HP. Inventarisnya mengubah
+    bentuk pekerjaan: **tiga dari empat permukaan media tidak pernah ditampilkan sama sekali**, jadi
+    sebagian besar kerjanya adalah memunculkan media yang selama ini tersembunyi.
+* **`dokumentasi` berhenti jadi write-only.** Bukti yang dikirim orang tua selama ini diunggah lalu
+    hilang dari UI selamanya — tidak ada read model, tidak ada signed URL, tidak ada layar.
+    Sekarang ada model `Documentation`, `signedDocumentationUrl`, `getDocumentation`, dan bagian
+    "Bukti yang Anda kirim" di `TaskDetailScreen` untuk tugas yang sudah selesai. **Tanpa migrasi** —
+    policy `dokumentasi_read` sudah mengizinkannya sejak `0001`.
+* **Foto presensi akhirnya terlihat.** `PresensiRepository.signedFotoUrl` selama ini kode mati
+    dengan nol pemanggil. Kartu kunjungan kini mengembang di tempat untuk menampilkan fotonya —
+    dimuat **hanya saat kartu dibuka**, karena tidak ada apa pun yang menulis `foto_thumb_path`,
+    jadi daftar bertumpuk thumbnail berarti mengunduh semua foto ukuran penuh hanya untuk menggulir.
+* **Video demo bisa ditonton, tanpa menambah pemutar.** Video wajib diunggah tapi selama ini
+    mustahil dilihat — hanya ikon `PlayCircle` mati. Sekarang bisa diunduh ke `Movies/Sipatokkong`
+    dan ditonton lewat aplikasi galeri bawaan. **Pemutar video di dalam aplikasi tetap tidak ada;
+    unduhan adalah jalan keluarnya, bukan pemutar.**
+* **Dua cabang penyimpanan, keduanya wajib di minSdk 27.** API 29+ menulis lewat `MediaStore`
+    dengan `RELATIVE_PATH` + `IS_PENDING`, tanpa izin apa pun. API 27–28 menulis ke direktori publik
+    (butuh `WRITE_EXTERNAL_STORAGE`, dideklarasikan dengan `maxSdkVersion="28"`) lalu memanggil
+    `MediaScannerConnection` — tanpa pemindaian itu file ada di disk tapi tak pernah muncul di
+    Galeri, yang akan terbaca pengguna sebagai "unduhannya gagal". Ini **permintaan izin runtime
+    pertama** di aplikasi ini.
+* **Video dikonfirmasi dulu dengan ukurannya**, foto langsung. `tugas-demo` mengizinkan 50 MB dan
+    hemat data adalah syarat keras project ini; dialog untuk foto 200 KB cuma gesekan.
+* **Streaming, bukan `ByteArray`.** `downloadAuthenticated(path): ByteArray` ada dan lebih pendek,
+    tapi menahan video 50 MB di RAM berisiko OOM justru di HP kelas bawah yang jadi sasaran. Jalur
+    yang dipakai `downloadAuthenticatedToAsFlow` → file cache → stream ke MediaStore, dengan progres
+    nyata dari `DownloadStatus.Progress`.
+* **Satu mesin state, bukan tiga.** `MediaDownloadHandler` disusun ke dalam ViewModel yang butuh,
+    supaya tiga layar tidak menyalin enam puluh baris yang sama. Kegagalan unduh memakai jalurnya
+    sendiri — satu unduhan gagal tidak boleh menghapus layar yang sedang dilihat.
+* **Verified:** `assembleDebug` hijau; **132 tes unit lulus, 17 baru**. Tiga aturan dibuktikan
+    dengan membalik kodenya: fallback ekstensi tak dikenal (1 gagal), locale eksplisit pada format
+    ukuran (2 gagal), dan konfirmasi sebelum unduh video (1 gagal).
+* **Not yet verified — semua yang runtime.** Tidak ada satu file pun yang benar-benar pernah
+    terunduh dari mesin ini. Yang paling rawan dan belum tersentuh: **cabang API 27–28** — dialog
+    izin, penulisan ke direktori publik, dan `MediaScannerConnection`. Belum diuji juga: file
+    muncul di album Galeri, video hasil unduhan benar-benar bisa diputar, penamaan anti-tabrakan
+    di jalur legacy, dan perilaku saat koneksi putus di tengah unduhan.
+
+### [2026-08-25] - Presensi: The Volunteer's Attendance Form + Admin Recap
+* **The gap:** `presensi` shipped complete in migration `0001` — table, indexes, RLS, a private
+    storage bucket, even a `notif_type` value — and then nothing was ever built against it. Not one
+    Kotlin file mentioned it. The status doc listed it as "In Progress", which read as half-built
+    when the client side was at zero.
+* **What was added:** a "Catat Kunjungan" form for the volunteer (child, date defaulting to today,
+    session note, mandatory proof photo), a "Presensi" tab holding their own visit history, and an
+    admin **Rekap Absensi Relawan** screen — visits per volunteer over a date range.
+* **Compression stopped being optional.** `id.zelory:compressor` has been declared in
+    `libs.versions.toml` since the start and never imported; nothing needed it, because
+    `tugas-demo` allows 50 MB. The `presensi` bucket allows **6 MB and images only**, and a modern
+    phone photo routinely exceeds that — so without compression this feature would simply fail on
+    real devices. `core/media/ImageCompressor` re-encodes to JPEG at ≤200 KB, which is also what
+    the bandwidth budget asked for all along.
+* **Migration `0005` adds one unique index** on `(relawan_id, anak_id, tanggal)`. There was no
+    constraint at all, so a double tap wrote two rows and inflated every recap number — and
+    `presensi` deliberately has no DELETE policy, so a duplicate could never be removed from the
+    app. The client maps the resulting `23505` to "Kunjungan untuk anak ini pada tanggal tersebut
+    sudah dicatat." rather than surfacing a raw Postgrest error. Same reasoning, same shape as the
+    constraint `0002` put on `tugas_penyelesaian`.
+* **The upload path is now shared, not copied.** `TaskRepository.uploadTo` was the only
+    implementation of the `{anak_id}/{yyyy}/{MM}/{uuid}.{ext}` convention, and getting the first
+    segment wrong makes *every* storage policy reject the upload. It moved to
+    `data/repository/StorageUpload.kt` and both repositories call it. Likewise `SectionLabel`,
+    `ChildDropdown`, `DeadlineField` and `MediaPickerBox` went from `private` to `internal` in
+    `CreateTaskScreen` so the presensi form reuses them — the duplication debt this file already
+    carries was not worth doubling.
+* **The recap is built from the volunteer list, not from the presensi rows.** Grouping the rows
+    would drop every volunteer who visited nobody — precisely the entry the foundation opens this
+    screen to find. There is a test that fails if anyone "simplifies" it back.
+* **History rows are text-only, on purpose.** Nothing in this app writes `foto_thumb_path`, so a
+    thumbnail list would download every full-size proof photo to render — the opposite of the
+    data-frugality rule. A chip says a photo exists; the photo is not re-fetched.
+* **Verified:** `assembleDebug` green; **115 unit tests pass, 25 new**. Three rules were confirmed
+    by reverting the code and watching the tests fail: the inclusive date range (1 failure), the
+    recap being built from the volunteer list (7 failures), and `canSubmit` requiring a photo and
+    blocking a second tap (2 failures).
+* **Not yet verified — nothing runtime.** Migration `0005` has **not** been applied to the live
+    project yet, so no insert has ever been attempted. No screen has been seen on a device: the
+    form layout, the fourth bottom-nav tab, the compression actually landing under 200 KB, and the
+    duplicate-day message are all untested outside the compiler.
+* **Known limitation carried over:** if the row insert fails after the photo upload succeeds, the
+    orphaned object stays in the bucket. `CreateTaskViewModel` has always behaved this way; it is
+    recorded here rather than quietly inherited.
 
 ### [2026-08-16] - Volunteer Screens: A Real Home, and Six Flow Fixes
 * **The volunteer had no home screen.** It was an unstyled `Box` of four buttons written inline in

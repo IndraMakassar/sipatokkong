@@ -62,6 +62,9 @@ Parent dashboard reference:
 - **Monitor task status:** dashboard of assigned tasks with `assigned / submitted / done / overdue` status and
   a done/pending filter.
 - **Notifications:** get alerted when a parent submits feedback or misses a task.
+- **Save media to the phone:** any photo/video in the app can be downloaded into the gallery
+  (`Pictures/Sipatokkong`, `Movies/Sipatokkong`). Videos ask for confirmation first and show their
+  size, because data is scarce for these families.
 
 ### 👨‍👩‍👧 Orang Tua — Parent
 The parent module, exactly as scoped:
@@ -80,6 +83,10 @@ The parent module, exactly as scoped:
 - **Notifications**
   - Weekly/daily task reminders.
   - Replies to submitted feedback.
+- **Save media to the phone**
+  - Download the volunteer's demo photo/video, and the proof the parent sent, into the gallery.
+  - This is also how a demo **video** is watched: there is no in-app player, so the file is saved
+    and opened with the phone's own gallery app.
 
 ### 🗂️ Admin — Foundation (Yayasan)
 - **Account registration:** create volunteer and parent accounts (there is no public sign-up).
@@ -196,13 +203,14 @@ Then launch the app on an Android device (USB or wireless debugging) or an emula
 - [x] Database schema + RLS + storage buckets + triggers (Phase 1)
 - [x] Authentication & role-based routing (Phase 2)
 - [x] Admin: create-account screen (in progress)
+- [x] Relawan: presensi (attendance) vertical slice
+- [x] Admin: attendance recap (visits per volunteer, by date range)
 
 **Planned**
-- [ ] Relawan: presensi (attendance) vertical slice
 - [ ] Relawan: create/manage tugas (homework) with mandatory demo media
 - [ ] Orang Tua: task list, "Selesai", self-documentation upload
 - [ ] Feedback threads + notifications
-- [ ] Admin: attendance & progress dashboard + export
+- [ ] Admin: progress dashboard + export
 - [ ] Scheduled task reminders
 
 ---

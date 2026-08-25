@@ -544,13 +544,13 @@ private fun AidMenuRow(value: String, checked: Boolean, onToggle: (String) -> Un
 }
 
 @Composable
-private fun SectionLabel(text: String) {
+internal fun SectionLabel(text: String) {
     Text(text, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyLarge)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ChildDropdown(
+internal fun ChildDropdown(
     children: List<com.antoniusindra.sipatokkong.data.model.ChildOption>,
     isLoading: Boolean,
     selectedName: String?,
@@ -593,11 +593,15 @@ private fun ChildDropdown(
 }
 
 @Composable
-private fun MediaPickerBox(
+internal fun MediaPickerBox(
     mediaUri: String?,
     mediaKind: MediaKind?,
     mediaName: String?,
     onPick: () -> Unit,
+    // Worded by the caller: the presensi bucket accepts photos only, so the task form's
+    // "foto/video ... MP4" prompt would be a lie there.
+    emptyPrompt: String = "Ketuk untuk pilih foto/video",
+    formatHint: String = "JPG, WebP, atau MP4",
 ) {
     Column(
         modifier = Modifier
@@ -635,8 +639,8 @@ private fun MediaPickerBox(
                     tint = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(Modifier.height(8.dp))
-                Text("Ketuk untuk pilih foto/video")
-                Text("JPG, WebP, atau MP4", style = MaterialTheme.typography.labelMedium)
+                Text(emptyPrompt)
+                Text(formatHint, style = MaterialTheme.typography.labelMedium)
             }
         }
     }
@@ -644,7 +648,7 @@ private fun MediaPickerBox(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DeadlineField(
+internal fun DeadlineField(
     deadline: LocalDate?,
     onPick: (LocalDate?) -> Unit,
     label: String = "Deadline",

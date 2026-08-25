@@ -8,7 +8,11 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.media.MediaBucket
+import com.antoniusindra.sipatokkong.core.media.MediaDownloadHandler
+import com.antoniusindra.sipatokkong.core.media.MediaRef
 import com.antoniusindra.sipatokkong.data.model.ChildResponse
+import com.antoniusindra.sipatokkong.data.model.Documentation
 import com.antoniusindra.sipatokkong.data.model.WorkDuration
 import com.antoniusindra.sipatokkong.data.model.DocumentationInsert
 import com.antoniusindra.sipatokkong.data.model.MediaKind
@@ -34,6 +38,9 @@ data class TaskDetailUiState(
     val loadError: String? = null,
     /** True when this specific date has already been completed. */
     val alreadyDone: Boolean = false,
+    /** The proof the parent already submitted for this date, once it has been read back. */
+    val submittedProof: Documentation? = null,
+    val submittedProofUrl: String? = null,
     // completion form
     val response: ChildResponse? = null,
     val duration: WorkDuration? = null,
@@ -53,8 +60,19 @@ class TaskDetailViewModel(
     private val _uiState = MutableStateFlow(TaskDetailUiState())
     val uiState: StateFlow<TaskDetailUiState> = _uiState.asStateFlow()
 
+    /** Saving media to the gallery, shared with every other screen that shows media. */
+    val download = MediaDownloadHandler(viewModelScope)
+
     private var proofExt: String? = null
     private var loaded = false
+
+    /** The volunteer's demo media, as a downloadable reference. */
+    fun demoRef(): MediaRef? =
+        _uiState.value.tugas?.let { MediaRef(MediaBucket.DEMO, it.mediaPath) }
+
+    /** The parent's own submitted proof, as a downloadable reference. */
+    fun proofRef(): MediaRef? =
+        _uiState.value.submittedProof?.let { MediaRef(MediaBucket.DOKUMENTASI, it.mediaPath) }
 
     fun load(id: String, occurrenceDate: LocalDate) {
         if (loaded) return
@@ -70,15 +88,18 @@ class TaskDetailViewModel(
                     taskId = id,
                     date = occurrenceDate,
                 )
-                Triple(tugas, url, done)
-            }.onSuccess { (tugas, url, done) ->
+                val proof = if (done) loadProof(id, occurrenceDate) else null
+                Loaded(tugas, url, done, proof?.first, proof?.second)
+            }.onSuccess { loaded ->
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        tugas = tugas,
-                        mediaUrl = url,
+                        tugas = loaded.tugas,
+                        mediaUrl = loaded.mediaUrl,
                         occurrenceDate = occurrenceDate,
-                        alreadyDone = done,
+                        alreadyDone = loaded.done,
+                        submittedProof = loaded.proof,
+                        submittedProofUrl = loaded.proofUrl,
                     )
                 }
             }.onFailure { e ->
@@ -86,6 +107,33 @@ class TaskDetailViewModel(
             }
         }
     }
+
+    /** Bundles what one load produced; a Triple stopped being readable at five values. */
+    private data class Loaded(
+        val tugas: Task,
+        val mediaUrl: String?,
+        val done: Boolean,
+        val proof: Documentation?,
+        val proofUrl: String?,
+    )
+
+    /**
+     * Reads back the proof the parent already sent for this date.
+     *
+     * Failure is swallowed: the proof is a bonus on an already-complete screen, and an error here
+     * must not stop the task itself from opening. Older completions predate `dokumentasi_id` being
+     * populated, so a null is normal rather than a fault.
+     */
+    private suspend fun loadProof(
+        tugasId: String,
+        occurrenceDate: LocalDate,
+    ): Pair<Documentation, String?>? = runCatching {
+        val completion = taskRepository.completionFor(tugasId, occurrenceDate.toString())
+        val dokumentasiId = completion?.dokumentasiId ?: return@runCatching null
+        val doc = taskRepository.getDocumentation(dokumentasiId) ?: return@runCatching null
+        val url = runCatching { taskRepository.signedDocumentationUrl(doc.mediaPath) }.getOrNull()
+        doc to url
+    }.getOrNull()
 
     fun onResponseChange(r: ChildResponse) = _uiState.update { it.copy(response = r) }
     fun onDurationChange(d: WorkDuration) = _uiState.update { it.copy(duration = d) }
