@@ -97,6 +97,17 @@ sight, which defeats the point of showing them at all.
 
 ## Change Log
 
+### [2026-08-27] - Presensi: Switch from Gallery to Camera
+* **What changed:** The proof photo for volunteer visits is now captured directly using the camera instead of being picked from the gallery.
+* **Implementation:**
+    *   Added `FileProvider` to `AndroidManifest.xml` with authority `${applicationId}.fileprovider`.
+    *   Created `res/xml/file_paths.xml` for temporary camera storage.
+    *   Implemented `CameraUriManager` to handle temporary `Uri` generation.
+    *   Updated `CreatePresensiScreen.kt` to use `ActivityResultContracts.TakePicture()` and managed the temporary `Uri` with `rememberSaveable`.
+    *   Fixed `meta-data` name in `AndroidManifest.xml` to `android.support.FILE_PROVIDER_PATHS`.
+* **Verified:** `assembleDebug` succeeded; `CameraUriManager` and `CreatePresensiScreen` compile correctly.
+* **Not yet verified:** Runtime camera capture, `FileProvider` permission handling on physical devices, and photo saving to the temporary URI.
+
 ### [2026-08-26] - Semua Media Bisa Diunduh ke Galeri HP
 * **Yang diminta:** setiap gambar/video bisa diunduh dan tersimpan di HP. Inventarisnya mengubah
     bentuk pekerjaan: **tiga dari empat permukaan media tidak pernah ditampilkan sama sekali**, jadi

@@ -1,8 +1,8 @@
 package com.antoniusindra.sipatokkong.ui.volunteer
 
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -36,6 +36,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -44,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.antoniusindra.sipatokkong.core.media.CameraUriManager
 import com.antoniusindra.sipatokkong.data.model.MediaKind
 import com.antoniusindra.sipatokkong.ui.theme.AppBackground
 import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
@@ -78,9 +82,15 @@ fun CreatePresensiScreen(
         }
     }
 
-    val fotoPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia()
-    ) { uri -> if (uri != null) viewModel.onFotoPicked(uri) }
+    var tempUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) {
+            tempUri?.let { viewModel.onFotoPicked(it) }
+        }
+    }
 
     Scaffold(
         containerColor = AppBackground,
@@ -135,7 +145,6 @@ fun CreatePresensiScreen(
             SectionLabel("Tanggal Kunjungan*")
             DeadlineField(
                 deadline = ui.tanggal,
-                onPick = viewModel::onTanggalChange,
                 label = "Tanggal Kunjungan",
             )
 
@@ -157,11 +166,11 @@ fun CreatePresensiScreen(
                 mediaKind = MediaKind.IMAGE.takeIf { ui.fotoUri != null },
                 mediaName = null,
                 onPick = {
-                    fotoPicker.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                    )
+                    val uri = CameraUriManager.createTempUri(context)
+                    tempUri = uri
+                    cameraLauncher.launch(uri)
                 },
-                emptyPrompt = "Ketuk untuk pilih foto",
+                emptyPrompt = "Ketuk untuk ambil foto",
                 formatHint = "Foto dikecilkan otomatis sebelum diunggah",
             )
 
