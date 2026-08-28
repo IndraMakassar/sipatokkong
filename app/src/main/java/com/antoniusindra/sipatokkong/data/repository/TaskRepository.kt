@@ -8,6 +8,8 @@ import com.antoniusindra.sipatokkong.data.model.TaskInsert
 import com.antoniusindra.sipatokkong.data.model.TaskCompletion
 import com.antoniusindra.sipatokkong.data.model.TaskCompletionInsert
 import com.antoniusindra.sipatokkong.data.model.TaskStopUpdate
+import com.antoniusindra.sipatokkong.data.model.TaskTemplate
+import com.antoniusindra.sipatokkong.data.model.TaskTemplateInsert
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
@@ -108,13 +110,87 @@ class TaskRepository(private val client: SupabaseClient) {
         }
     }
 
+    // ---- Relawan: program ajar templates ----
+
+    /**
+     * Templates visible to the current user.
+     *
+     * Unfiltered on purpose, like [programsForCurrentVolunteer]: RLS policy `template_select`
+     * admits any volunteer (templates are shared) and no parent, so the client adds nothing.
+     */
+    suspend fun templates(): List<TaskTemplate> =
+        client.postgrest.from("tugas_template")
+            .select { order("created_at", Order.DESCENDING) }
+            .decodeList()
+
+    suspend fun getTemplate(id: String): TaskTemplate? =
+        client.postgrest.from("tugas_template")
+            .select { filter { eq("id", id) } }
+            .decodeSingleOrNull()
+
+    suspend fun createTemplate(insert: TaskTemplateInsert): String =
+        client.postgrest.from("tugas_template")
+            .insert(insert) { select(Columns.list("id")) }
+            .decodeSingle<InsertedId>()
+            .id
+
+    /** Allowed by `template_delete` only for the template's own author. */
+    suspend fun deleteTemplate(id: String) {
+        client.postgrest.from("tugas_template").delete { filter { eq("id", id) } }
+    }
+
+    /** Temporary signed URL for a template's demo object, for previewing it on the form. */
+    suspend fun signedTemplateUrl(path: String): String =
+        client.storage.from("tugas-template").createSignedUrl(path, 1.hours)
+
+    /**
+     * Copies a task's demo media into the template bucket; returns the new path.
+     *
+     * Server-side — the file never travels through the phone a second time, which matters because
+     * nothing in this app compresses media and the bucket ceiling is 50 MB.
+     */
+    suspend fun copyDemoToTemplate(fromPath: String, relawanId: String): String =
+        copyBetween("tugas-demo", "tugas-template", fromPath, relawanId)
+
+    /**
+     * Copies a template's media back into `tugas-demo` under [anakId]; returns the new path.
+     *
+     * Required, not an optimisation: `tugasdemo_read` grants access by the child id in the first
+     * path segment, so only after this copy can that child's **parent** open the demo at all.
+     */
+    suspend fun copyTemplateToDemo(fromPath: String, anakId: String): String =
+        copyBetween("tugas-template", "tugas-demo", fromPath, anakId)
+
     // ---- shared ----
 
     private suspend fun uploadTo(bucket: String, anakId: String, bytes: ByteArray, ext: String): String {
-        val now = LocalDate.now()
-        val month = now.monthValue.toString().padStart(2, '0')
-        val path = "$anakId/${now.year}/$month/${UUID.randomUUID()}.$ext"
+        val path = mediaPath(anakId, ext)
         client.storage.from(bucket).upload(path, bytes) { upsert = false }
         return path
+    }
+
+    private suspend fun copyBetween(
+        fromBucket: String,
+        toBucket: String,
+        fromPath: String,
+        ownerId: String,
+    ): String {
+        // Both buckets only accept jpg/webp/mp4, so a stored path always has an extension.
+        val path = mediaPath(ownerId, fromPath.substringAfterLast('.'))
+        client.storage.from(fromBucket).copy(fromPath, path, destinationBucket = toBucket)
+        return path
+    }
+
+    /**
+     * `{ownerId}/{yyyy}/{MM}/{uuid}.{ext}` — the one path convention, used by every write.
+     *
+     * The first segment is load-bearing: storage RLS reads it back with `storage_child_id` in the
+     * per-child buckets and `storage_owner_id` in `tugas-template`. Whether it means a child or a
+     * volunteer depends on the bucket, which is why the parameter is named neutrally.
+     */
+    private fun mediaPath(ownerId: String, ext: String): String {
+        val now = LocalDate.now()
+        val month = now.monthValue.toString().padStart(2, '0')
+        return "$ownerId/${now.year}/$month/${UUID.randomUUID()}.$ext"
     }
 }

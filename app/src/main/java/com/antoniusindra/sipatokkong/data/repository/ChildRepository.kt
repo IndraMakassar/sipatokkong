@@ -1,5 +1,6 @@
 package com.antoniusindra.sipatokkong.data.repository
 
+import com.antoniusindra.sipatokkong.data.model.AssignedChild
 import com.antoniusindra.sipatokkong.data.model.Child
 import com.antoniusindra.sipatokkong.data.model.ChildInsert
 import com.antoniusindra.sipatokkong.data.model.ChildOption
@@ -24,6 +25,26 @@ class ChildRepository(private val client: SupabaseClient) {
             }
             .decodeList<ChildOption>()
     }
+
+    /**
+     * The same children as [childrenForCurrentVolunteer], with the columns the home screen shows.
+     *
+     * The extra columns ride along on a request that was being made anyway, so this costs no round
+     * trip over the narrow projection. Scoping is still RLS's job (`anak_select` via
+     * `is_relawan_of`) -- there is no client-side filter on the volunteer.
+     *
+     * Sorted by name because the query has no `order()` and never had one, which left the old chip
+     * row in an unspecified order that could differ between loads.
+     */
+    suspend fun assignedChildrenForCurrentVolunteer(): List<AssignedChild> =
+        client.postgrest.from("anak")
+            .select(
+                columns = Columns.list("id", "nama", "tanggal_lahir", "catatan_kondisi", "orangtua_id")
+            ) {
+                filter { eq("is_active", true) }
+            }
+            .decodeList<AssignedChild>()
+            .sortedBy { it.nama.lowercase() }
 
     /** True if the given orang tua already has an active child (soft MVP "1 child per parent" rule). */
     suspend fun hasChild(orangtuaId: String): Boolean =

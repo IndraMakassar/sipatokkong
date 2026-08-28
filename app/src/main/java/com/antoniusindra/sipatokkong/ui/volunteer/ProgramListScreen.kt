@@ -1,5 +1,6 @@
 package com.antoniusindra.sipatokkong.ui.volunteer
 
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +34,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -49,13 +51,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.antoniusindra.sipatokkong.core.util.ShortDateId
 import com.antoniusindra.sipatokkong.data.model.Task
 import com.antoniusindra.sipatokkong.data.model.TaskPriority
+import com.antoniusindra.sipatokkong.ui.components.ActionErrorBanner
 import com.antoniusindra.sipatokkong.ui.components.EmptyState
 import com.antoniusindra.sipatokkong.ui.components.ErrorRetry
 import com.antoniusindra.sipatokkong.ui.components.RichTextDisplay
@@ -74,7 +79,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private val ShortDate = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.forLanguageTag("id-ID"))
+private val ShortDate = ShortDateId
 
 /** Volunteer's own programs, with the option to stop a recurring one. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -86,8 +91,20 @@ fun ProgramListScreen(
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
     var confirmStop by remember { mutableStateOf<Task?>(null) }
+    var nameTemplateFor by remember { mutableStateOf<Task?>(null) }
+    var templateName by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) { viewModel.refresh() }
+
+    // Nothing on this screen changes when a template is saved, so without this the button would
+    // just stop spinning and leave the volunteer guessing whether it worked.
+    val context = LocalContext.current
+    LaunchedEffect(ui.templateSavedName) {
+        ui.templateSavedName?.let { name ->
+            Toast.makeText(context, "Template \"$name\" tersimpan.", Toast.LENGTH_SHORT).show()
+            viewModel.dismissTemplateSaved()
+        }
+    }
 
     confirmStop?.let { target ->
         AlertDialog(
@@ -107,6 +124,48 @@ fun ProgramListScreen(
             },
             dismissButton = {
                 TextButton(onClick = { confirmStop = null }) { Text("Batal") }
+            },
+        )
+    }
+
+    nameTemplateFor?.let { target ->
+        AlertDialog(
+            onDismissRequest = { nameTemplateFor = null },
+            title = { Text("Jadikan template") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Judul, instruksi, prioritas, alat bantu, foto/video dan pola " +
+                            "pengulangannya disimpan. Anak dan tanggalnya tidak — itu diisi ulang " +
+                            "setiap kali template dipakai."
+                    )
+                    OutlinedTextField(
+                        value = templateName,
+                        onValueChange = { templateName = it.trimStart() },
+                        label = { Text("Nama Template") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    // No blank-name dead end: if it is cleared, fall back to the judul on save.
+                    // Templates are shared foundation-wide, and so is their media. Say so here.
+                    Text(
+                        "Template dan foto/videonya bisa dilihat semua relawan.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MutedText,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.saveAsTemplate(target, templateName.ifBlank { target.judul })
+                        nameTemplateFor = null
+                        templateName = ""
+                    },
+                ) { Text("Simpan") }
+            },
+            dismissButton = {
+                TextButton(onClick = { nameTemplateFor = null; templateName = "" }) { Text("Batal") }
             },
         )
     }
@@ -184,7 +243,14 @@ fun ProgramListScreen(
                                 childName = ui.childNameOf(task),
                                 today = ui.today,
                                 isStopping = ui.stoppingId == task.id,
+                                isSavingTemplate = ui.savingTemplateFor == task.id,
                                 onStop = { confirmStop = task },
+                                onSaveAsTemplate = {
+                                    // Prefilled from the judul the dialog already has in hand, so
+                                    // making a template is a tap rather than a typing exercise.
+                                    templateName = task.judul
+                                    nameTemplateFor = task
+                                },
                             )
                         }
                     }
@@ -197,7 +263,12 @@ fun ProgramListScreen(
                                 childName = ui.childNameOf(task),
                                 today = ui.today,
                                 isStopping = false,
+                                isSavingTemplate = ui.savingTemplateFor == task.id,
                                 onStop = null,
+                                onSaveAsTemplate = {
+                                    templateName = task.judul
+                                    nameTemplateFor = task
+                                },
                             )
                         }
                     }
@@ -209,27 +280,6 @@ fun ProgramListScreen(
     }
 }
 
-@Composable
-private fun ActionErrorBanner(message: String, onDismiss: () -> Unit) {
-    Surface(
-        color = StatusRedBg,
-        contentColor = StatusRedText,
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                message,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = onDismiss) { Text("Tutup", color = StatusRedText) }
-        }
-    }
-}
 
 @Composable
 private fun GroupLabel(text: String) {
@@ -258,7 +308,9 @@ private fun ProgramCard(
     childName: String,
     today: LocalDate,
     isStopping: Boolean,
+    isSavingTemplate: Boolean,
     onStop: (() -> Unit)?,
+    onSaveAsTemplate: () -> Unit,
 ) {
     val rule = task.toRecurrenceRule()
     val finished = rule.isFinished(today)
@@ -345,17 +397,30 @@ private fun ProgramCard(
                 }
             }
 
-            // Only a live recurring program can be stopped.
-            if (onStop != null && !inactive) {
-                TextButton(
-                    onClick = onStop,
-                    enabled = !isStopping,
-                    modifier = Modifier.align(Alignment.End),
-                ) {
-                    if (isStopping) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Offered on every program, stopped or finished included: a template is a recipe,
+                // and a programme being over says nothing about whether the exercise is worth
+                // reusing. Costs no upload -- the media is copied server-side.
+                TextButton(onClick = onSaveAsTemplate, enabled = !isSavingTemplate) {
+                    if (isSavingTemplate) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     } else {
-                        Text("Hentikan Program", color = StatusRedText)
+                        Text("Jadikan Template", color = BrandTeal)
+                    }
+                }
+
+                // Only a live recurring program can be stopped.
+                if (onStop != null && !inactive) {
+                    TextButton(onClick = onStop, enabled = !isStopping) {
+                        if (isStopping) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text("Hentikan Program", color = StatusRedText)
+                        }
                     }
                 }
             }

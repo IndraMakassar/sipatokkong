@@ -24,48 +24,56 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.time.LocalDate
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.antoniusindra.sipatokkong.core.util.formatIsoDate
 import com.antoniusindra.sipatokkong.data.model.Feedback
+import com.antoniusindra.sipatokkong.data.model.FeedbackMood
 import com.antoniusindra.sipatokkong.ui.components.EmptyState
 import com.antoniusindra.sipatokkong.ui.components.ErrorRetry
 import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
+import com.antoniusindra.sipatokkong.ui.theme.AppBackground
 import com.antoniusindra.sipatokkong.ui.theme.MutedText
-import com.antoniusindra.sipatokkong.ui.theme.StatusBlueBg
-import com.antoniusindra.sipatokkong.ui.theme.StatusBlueText
 import com.antoniusindra.sipatokkong.ui.theme.StatusGreenBg
 import com.antoniusindra.sipatokkong.ui.theme.StatusGreenText
 import com.antoniusindra.sipatokkong.ui.theme.StatusOrangeBg
 import com.antoniusindra.sipatokkong.ui.theme.StatusOrangeText
+import com.antoniusindra.sipatokkong.ui.theme.StatusTealBg
+import com.antoniusindra.sipatokkong.ui.theme.StatusTealText
 
 
 private data class StatusStyle(val label: String, val bg: Color, val text: Color)
 
-private fun feedbackStatusStyle(status: String): StatusStyle = when (status) {
-    "answered" -> StatusStyle("Dijawab", StatusGreenBg, StatusGreenText)
-    "in_process" -> StatusStyle("Diproses", StatusBlueBg, StatusBlueText)
-    else -> StatusStyle("Menunggu", StatusOrangeBg, StatusOrangeText) // open
-}
-
-private fun getMoodEmoji(mood: String?): String = when (mood) {
-    "Senang" -> "😊"
-    "Biasa" -> "😐"
-    "Rewel" -> "😢"
-    "Sakit" -> "🤒"
-    else -> "📝"
+// Driven by FeedbackTriage.stateOf, the same function behind the tabs. Before, the chip read only
+// `feedback.status` while the tabs read `needsAttention`, so a positive unanswered note sat under
+// "Sudah Beres" wearing an orange "Menunggu" -- the row arguing with the tab above it.
+//
+// (The `feedback_status` enum also declares 'in_process', but nothing writes it, so it has no chip.)
+private fun feedbackChipStyle(state: FeedbackState): StatusStyle = when (state) {
+    FeedbackState.DIJAWAB -> StatusStyle("Dijawab", StatusGreenBg, StatusGreenText)
+    FeedbackState.PERLU_DIBALAS -> StatusStyle("Perlu Dibalas", StatusOrangeBg, StatusOrangeText)
+    FeedbackState.KABAR_BAIK -> StatusStyle("Kabar Baik", StatusTealBg, StatusTealText)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -77,9 +85,17 @@ fun FeedbackListScreen(
     useScaffold: Boolean = true,
     /** Parent-voiced by default; a volunteer sees this list under a different title. */
     emptyText: String = "Belum ada catatan/feedback.",
+    /**
+     * Splits the list into "Perlu Ditanggapi" / "Sudah Beres". Off for parents, who only ever see
+     * their own child's notes and so have nothing to triage.
+     */
+    enableTriage: Boolean = false,
     viewModel: FeedbackListViewModel = viewModel(factory = FeedbackListViewModel.Factory),
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
+    var selectedBucket by rememberSaveable { mutableIntStateOf(0) }
+    // Read once per composition rather than per row, so every row agrees on what "Hari Ini" means.
+    val today = remember { LocalDate.now() }
 
     // Re-runs when this screen re-enters composition after popping back from a thread, so a reply
     // sent there is reflected here. Without it the list only ever loaded once per process.
@@ -103,24 +119,84 @@ fun FeedbackListScreen(
                 )
             }
 
-            else -> LazyColumn(
+            !enableTriage -> LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(ui.items) { fb -> FeedbackRow(fb, onClick = { onOpenThread(fb.id) }) }
+                items(ui.items) { fb ->
+                    FeedbackRow(fb, onClick = { onOpenThread(fb.id) }, today = today)
+                }
+            }
+
+            else -> {
+                // Recomputed from the list already in hand -- no second query. See FeedbackTriage.
+                val urgent = remember(ui.items) { FeedbackTriage.needsAttention(ui.items) }
+                val calm = remember(ui.items) { FeedbackTriage.settled(ui.items) }
+                val shown = if (selectedBucket == 0) urgent else calm
+
+                Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+                    PrimaryTabRow(
+                        selectedTabIndex = selectedBucket,
+                        containerColor = AppBackground,
+                        contentColor = BrandTeal,
+                    ) {
+                        Tab(
+                            selected = selectedBucket == 0,
+                            onClick = { selectedBucket = 0 },
+                            text = { Text("Perlu Ditanggapi (${urgent.size})") },
+                        )
+                        Tab(
+                            selected = selectedBucket == 1,
+                            onClick = { selectedBucket = 1 },
+                            text = { Text("Sudah Beres (${calm.size})") },
+                        )
+                    }
+
+                    if (shown.isEmpty()) {
+                        Box(Modifier.fillMaxSize(), Alignment.Center) {
+                            // The `ui.items.isEmpty()` branch above already caught "no notes at
+                            // all", so reaching here means the notes are simply all in the other
+                            // tab -- which is worth saying, and is why neither subtitle is the
+                            // generic `emptyText` any more.
+                            EmptyState(
+                                icon = Icons.AutoMirrored.Filled.Chat,
+                                title = if (selectedBucket == 0) {
+                                    "Tidak ada yang mendesak"
+                                } else {
+                                    "Belum ada yang beres"
+                                },
+                                subtitle = if (selectedBucket == 0) {
+                                    "Semua catatan yang perlu ditanggapi sudah dijawab."
+                                } else {
+                                    "Semua catatan masih menunggu tanggapan Anda."
+                                },
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            items(shown) { fb ->
+                                FeedbackRow(fb, onClick = { onOpenThread(fb.id) }, today = today)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 
     if (useScaffold) {
         Scaffold(
-            containerColor = MaterialTheme.colorScheme.background,
+            containerColor = AppBackground,
             topBar = {
                 TopAppBar(
                     title = { Text(title, fontWeight = FontWeight.Bold) },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
+                        containerColor = AppBackground,
                     )
                 )
             },
@@ -158,8 +234,8 @@ fun FeedbackListScreen(
 }
 
 @Composable
-private fun FeedbackRow(fb: Feedback, onClick: () -> Unit) {
-    val style = feedbackStatusStyle(fb.status)
+private fun FeedbackRow(fb: Feedback, onClick: () -> Unit, today: LocalDate) {
+    val style = feedbackChipStyle(FeedbackTriage.stateOf(fb))
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -179,15 +255,18 @@ private fun FeedbackRow(fb: Feedback, onClick: () -> Unit) {
                     .background(Color(0xFFF5F5F5), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Text(getMoodEmoji(fb.mood), fontSize = 24.sp)
+                Text(FeedbackMood.emojiOf(fb.mood), fontSize = 24.sp)
             }
 
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        fb.isi,
+                        // Not `fb.isi`: that is auto-filled with a constant when the parent types
+                        // nothing, which made every chip-only note read the same. See FeedbackSummary.
+                        FeedbackSummary.headlineOf(fb),
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
                     Spacer(Modifier.padding(4.dp))
@@ -197,16 +276,19 @@ private fun FeedbackRow(fb: Feedback, onClick: () -> Unit) {
                         Text(style.label, color = style.text, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                 }
-                if (!fb.kendala.isNullOrBlank()) {
+                // Null when the chips are already the headline -- printing them twice on one
+                // row is worse than printing them once.
+                FeedbackSummary.subtitleOf(fb)?.let {
                     Text(
-                        fb.kendala,
+                        it,
                         style = MaterialTheme.typography.bodySmall,
                         color = MutedText,
-                        maxLines = 1
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
-                fb.createdAt?.let {
-                    Text(it.take(10), style = MaterialTheme.typography.labelSmall, color = MutedText)
+                formatIsoDate(fb.createdAt, today)?.let {
+                    Text(it, style = MaterialTheme.typography.labelSmall, color = MutedText)
                 }
             }
         }

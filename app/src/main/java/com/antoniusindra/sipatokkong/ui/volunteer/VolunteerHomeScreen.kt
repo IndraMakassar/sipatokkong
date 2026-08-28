@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Home
@@ -53,6 +54,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,7 +65,12 @@ import com.antoniusindra.sipatokkong.ui.home.ProfileScreen
 import com.antoniusindra.sipatokkong.ui.theme.AppBackground
 import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
 import com.antoniusindra.sipatokkong.ui.theme.IconBoxBg
+import com.antoniusindra.sipatokkong.ui.home.StatusChip
 import com.antoniusindra.sipatokkong.ui.theme.MutedText
+import com.antoniusindra.sipatokkong.ui.theme.StatusOrangeBg
+import com.antoniusindra.sipatokkong.ui.theme.StatusOrangeText
+import com.antoniusindra.sipatokkong.ui.theme.StatusTealBg
+import com.antoniusindra.sipatokkong.ui.theme.StatusTealText
 import com.antoniusindra.sipatokkong.ui.theme.ProgressGradBottom
 import com.antoniusindra.sipatokkong.ui.theme.ProgressGradTop
 import com.antoniusindra.sipatokkong.ui.theme.SipatokkongTheme
@@ -89,6 +96,8 @@ fun VolunteerHomeScreen(
     ui: VolunteerHomeUiState,
     onCreateProgram: () -> Unit,
     onOpenPrograms: () -> Unit,
+    onOpenTemplates: () -> Unit,
+    onOpenChild: (String) -> Unit,
     onOpenFeedbackThread: (String) -> Unit,
     onRetry: () -> Unit,
     onLogout: () -> Unit,
@@ -130,6 +139,8 @@ fun VolunteerHomeScreen(
                     ui = ui,
                     onCreateProgram = onCreateProgram,
                     onOpenPrograms = onOpenPrograms,
+                    onOpenTemplates = onOpenTemplates,
+                    onOpenChild = onOpenChild,
                     onRetry = onRetry,
                 )
 
@@ -139,6 +150,8 @@ fun VolunteerHomeScreen(
                     // No onCompose: a volunteer replies to threads, they do not start them.
                     emptyText = "Belum ada catatan dari orang tua.",
                     useScaffold = false,
+                    // Split the inbox so a sick child does not sit between ten "semua lancar" notes.
+                    enableTriage = true,
                 )
 
                 else -> ProfileScreen(
@@ -158,6 +171,8 @@ private fun VolunteerBeranda(
     ui: VolunteerHomeUiState,
     onCreateProgram: () -> Unit,
     onOpenPrograms: () -> Unit,
+    onOpenTemplates: () -> Unit,
+    onOpenChild: (String) -> Unit,
     onRetry: () -> Unit,
 ) {
     Column(
@@ -185,15 +200,36 @@ private fun VolunteerBeranda(
             onClick = onCreateProgram,
         )
         ActionCard(
+            icon = Icons.Filled.ContentCopy,
+            title = "Pakai Template",
+            description = "Mulai dari latihan yang sudah pernah dibuat, tanpa unggah ulang media.",
+            onClick = onOpenTemplates,
+        )
+        ActionCard(
             icon = Icons.AutoMirrored.Filled.Assignment,
             title = "Program Ajar Saya",
             description = "Lihat program yang berjalan dan hentikan bila perlu.",
             onClick = onOpenPrograms,
         )
 
+        // Hidden when there are none: the summary card above already says "Belum ada anak yang
+        // ditugaskan kepada Anda.", so a second empty state here would only repeat it.
         if (ui.children.isNotEmpty()) {
-            Text("Anak Binaan Saya", fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            ChildChips(names = ui.children.map { it.nama })
+            Text(
+                "Anak Binaan Saya (${ui.children.size})",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            ui.children.forEach { child ->
+                ChildCard(
+                    name = child.nama,
+                    initial = child.initial,
+                    subtitle = ui.subtitleOf(child),
+                    condition = child.catatanKondisi,
+                    activePrograms = ui.activeProgramCount(child),
+                    onClick = { onOpenChild(child.id) },
+                )
+            }
         }
     }
 }
@@ -335,30 +371,94 @@ private fun ActionCard(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * One assigned child.
+ *
+ * Deliberately the same card as [ActionCard] -- white, 16dp radius, 2dp elevation, 48dp tile,
+ * 17sp bold title over a muted line. This used to be a row of bare white pills carrying nothing but
+ * a name, which read as a different app from the cards directly above it and could not be tapped.
+ *
+ * Colours come straight from `ui.theme`, never `MaterialTheme.colorScheme`: `dynamicColor` is still
+ * true, so on Android 12+ the scheme is taken from the user's wallpaper and `primary` is not
+ * BrandTeal.
+ */
 @Composable
-private fun ChildChips(names: List<String>) {
-    // verticalArrangement matters: without it, chips that wrap onto a second line sit flush
-    // against the one above.
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+private fun ChildCard(
+    name: String,
+    initial: Char?,
+    subtitle: String,
+    condition: String?,
+    activePrograms: Int,
+    onClick: () -> Unit,
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
-        names.forEach { name ->
+        Column(
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Row(
-                modifier = Modifier
-                    .background(Color.White, CircleShape)
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Icon(
-                    Icons.Filled.ChildCare,
-                    contentDescription = null,
-                    tint = BrandTeal,
-                    modifier = Modifier.size(16.dp),
+                // A circle, not the 14dp-rounded tile the action cards use: this stands for a
+                // person, not a category. Falls back to the app's established child glyph when the
+                // name gives us no letter to show.
+                Box(
+                    modifier = Modifier.size(48.dp).background(IconBoxBg, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (initial != null) {
+                        Text(
+                            initial.toString(),
+                            color = BrandTeal,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    } else {
+                        Icon(Icons.Filled.ChildCare, contentDescription = null, tint = BrandTeal)
+                    }
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(name, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    if (subtitle.isNotBlank()) {
+                        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MutedText)
+                    }
+                }
+
+                // A child with no running programme is the one thing on this screen worth acting
+                // on, so it gets the warm chip rather than being indistinguishable from the rest.
+                if (activePrograms == 0) {
+                    StatusChip("Belum ada program", StatusOrangeBg, StatusOrangeText)
+                } else {
+                    StatusChip("$activePrograms program", StatusTealBg, StatusTealText)
+                }
+            }
+
+            if (!condition.isNullOrBlank()) {
+                Text(
+                    // Labelled, because unlike "5 program" or "6 tahun" this is free text that
+                    // describes nothing about itself -- a bare note reads as a stray character.
+                    "Kondisi: ${condition.trim()}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MutedText,
+                    // Free text with no length limit in the schema, so it must be clamped.
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    // Lines up with the name above instead of starting under the avatar: 48dp
+                    // avatar + the Row's 12dp gap. Left out, the note hangs off the card's edge
+                    // and reads as unrelated to the child it belongs to.
+                    modifier = Modifier.padding(start = 60.dp),
                 )
-                Text(name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -400,6 +500,8 @@ private fun VolunteerHomeScreenPreview() {
             ui = VolunteerHomeUiState(isLoading = false),
             onCreateProgram = {},
             onOpenPrograms = {},
+            onOpenTemplates = {},
+            onOpenChild = {},
             onOpenFeedbackThread = {},
             onRetry = {},
             onLogout = {},
