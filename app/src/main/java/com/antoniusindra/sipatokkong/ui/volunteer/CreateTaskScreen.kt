@@ -7,6 +7,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,26 +18,23 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Title
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.InputChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -45,13 +44,13 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,29 +61,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
 import com.antoniusindra.sipatokkong.core.recurrence.RecurrenceType
 import com.antoniusindra.sipatokkong.core.recurrence.labelId
 import com.antoniusindra.sipatokkong.data.model.MediaKind
 import com.antoniusindra.sipatokkong.data.model.TaskPriority
 import com.antoniusindra.sipatokkong.data.model.TeachingAid
 import java.time.DayOfWeek
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -298,13 +293,11 @@ fun CreateTaskScreen(
                 SectionLabel("Tanggal Mulai*")
                 DeadlineField(
                     deadline = ui.startsOn,
-                    onPick = viewModel::onStartsOnChange,
                     label = "Tanggal Mulai",
                 )
                 SectionLabel("Tanggal Selesai*")
                 DeadlineField(
                     deadline = ui.endsOn,
-                    onPick = viewModel::onEndsOnChange,
                     label = "Tanggal Selesai",
                 )
             } else {
@@ -312,7 +305,6 @@ fun CreateTaskScreen(
                 SectionLabel("Deadline (opsional)")
                 DeadlineField(
                     deadline = ui.deadline,
-                    onPick = viewModel::onDeadlineChange,
                 )
             }
 
@@ -544,13 +536,13 @@ private fun AidMenuRow(value: String, checked: Boolean, onToggle: (String) -> Un
 }
 
 @Composable
-private fun SectionLabel(text: String) {
+internal fun SectionLabel(text: String) {
     Text(text, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyLarge)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ChildDropdown(
+internal fun ChildDropdown(
     children: List<com.antoniusindra.sipatokkong.data.model.ChildOption>,
     isLoading: Boolean,
     selectedName: String?,
@@ -593,11 +585,15 @@ private fun ChildDropdown(
 }
 
 @Composable
-private fun MediaPickerBox(
+internal fun MediaPickerBox(
     mediaUri: String?,
     mediaKind: MediaKind?,
     mediaName: String?,
     onPick: () -> Unit,
+    // Worded by the caller: the presensi bucket accepts photos only, so the task form's
+    // "foto/video ... MP4" prompt would be a lie there.
+    emptyPrompt: String = "Ketuk untuk pilih foto/video",
+    formatHint: String = "JPG, WebP, atau MP4",
 ) {
     Column(
         modifier = Modifier
@@ -635,8 +631,8 @@ private fun MediaPickerBox(
                     tint = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(Modifier.height(8.dp))
-                Text("Ketuk untuk pilih foto/video")
-                Text("JPG, WebP, atau MP4", style = MaterialTheme.typography.labelMedium)
+                Text(emptyPrompt)
+                Text(formatHint, style = MaterialTheme.typography.labelMedium)
             }
         }
     }
@@ -644,9 +640,8 @@ private fun MediaPickerBox(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DeadlineField(
+internal fun DeadlineField(
     deadline: LocalDate?,
-    onPick: (LocalDate?) -> Unit,
     label: String = "Deadline",
 ) {
     var showPicker by remember { mutableStateOf(false) }
@@ -663,31 +658,4 @@ private fun DeadlineField(
             .fillMaxWidth()
             .clickable { showPicker = true },
     )
-
-    if (showPicker) {
-        // Seeded with the current value so re-opening starts on the chosen date.
-        val state = rememberDatePickerState(
-            initialSelectedDateMillis = deadline
-                ?.atStartOfDay(ZoneOffset.UTC)
-                ?.toInstant()
-                ?.toEpochMilli(),
-        )
-        DatePickerDialog(
-            onDismissRequest = { showPicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    val millis = state.selectedDateMillis
-                    if (millis != null) {
-                        onPick(Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate())
-                    }
-                    showPicker = false
-                }) { Text("OK") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPicker = false }) { Text("Batal") }
-            },
-        ) {
-            DatePicker(state = state)
-        }
-    }
 }

@@ -57,6 +57,10 @@ import coil3.compose.AsyncImage
 import com.antoniusindra.sipatokkong.data.model.ChildResponse
 import com.antoniusindra.sipatokkong.data.model.MediaKind
 import com.antoniusindra.sipatokkong.data.model.WorkDuration
+import com.antoniusindra.sipatokkong.core.media.MediaDownloadState
+import com.antoniusindra.sipatokkong.data.model.Documentation
+import com.antoniusindra.sipatokkong.ui.components.DownloadIconButton
+import com.antoniusindra.sipatokkong.ui.components.MediaDownloadHost
 import com.antoniusindra.sipatokkong.ui.components.RichTextDisplay
 import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
 import com.antoniusindra.sipatokkong.ui.theme.MutedText
@@ -76,6 +80,7 @@ fun TaskDetailScreen(
     viewModel: TaskDetailViewModel = viewModel(factory = TaskDetailViewModel.Factory),
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
+    val downloadState by viewModel.download.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     LaunchedEffect(tugasId, occurrenceDate) { viewModel.load(tugasId, occurrenceDate) }
@@ -135,12 +140,22 @@ fun TaskDetailScreen(
             ui.tugas != null -> DetailBody(
                 modifier = Modifier.padding(innerPadding),
                 ui = ui,
+                download = downloadState,
+                onDownloadDemo = { viewModel.demoRef()?.let(viewModel.download::request) },
+                onDownloadProof = { viewModel.proofRef()?.let(viewModel.download::request) },
                 onResponse = viewModel::onResponseChange,
                 onDuration = viewModel::onDurationChange,
                 onCatatan = viewModel::onCatatanChange,
             )
         }
     }
+
+    MediaDownloadHost(
+        state = downloadState,
+        onConfirm = viewModel.download::confirm,
+        onCancel = viewModel.download::cancel,
+        onDismissMessage = viewModel.download::dismissMessage,
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -148,6 +163,9 @@ fun TaskDetailScreen(
 private fun DetailBody(
     modifier: Modifier,
     ui: TaskDetailUiState,
+    download: MediaDownloadState,
+    onDownloadDemo: () -> Unit,
+    onDownloadProof: () -> Unit,
     onResponse: (ChildResponse) -> Unit,
     onDuration: (WorkDuration) -> Unit,
     onCatatan: (String) -> Unit,
@@ -162,7 +180,12 @@ private fun DetailBody(
     ) {
         // Labelled so the parent knows this is the volunteer's demonstration, not their own upload.
         Text("Media Ajar", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        MediaHero(mediaUrl = ui.mediaUrl, isVideo = tugas.mediaKind == "video")
+        MediaHero(
+            mediaUrl = ui.mediaUrl,
+            isVideo = tugas.mediaKind == "video",
+            download = download,
+            onDownload = onDownloadDemo,
+        )
 
         // Info card
         Card(
@@ -227,6 +250,15 @@ private fun DetailBody(
                         "Tugas ini sudah ditandai selesai."
                     },
                     fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            ui.submittedProof?.let { proof ->
+                SubmittedProof(
+                    proof = proof,
+                    proofUrl = ui.submittedProofUrl,
+                    download = download,
+                    onDownload = onDownloadProof,
                 )
             }
         } else {
@@ -303,8 +335,20 @@ private fun DetailBody(
     }
 }
 
+/**
+ * The volunteer's demo media, with a download button.
+ *
+ * There is still no in-app video player. Downloading is what makes a demo video watchable at all:
+ * it was mandatory to upload and impossible to view, so the file now goes to the gallery and the
+ * phone's own player opens it. The `PlayCircle` icon, dead until now, says so out loud.
+ */
 @Composable
-private fun MediaHero(mediaUrl: String?, isVideo: Boolean) {
+private fun MediaHero(
+    mediaUrl: String?,
+    isVideo: Boolean,
+    download: MediaDownloadState,
+    onDownload: () -> Unit,
+) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -321,14 +365,85 @@ private fun MediaHero(mediaUrl: String?, isVideo: Boolean) {
             )
         }
         if (isVideo) {
-            // Private-bucket video playback is out of scope; show a play affordance.
-            Icon(
-                Icons.Filled.PlayCircle,
-                contentDescription = "Video demonstrasi",
-                tint = Color.White,
-                modifier = Modifier.size(64.dp),
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    Icons.Filled.PlayCircle,
+                    contentDescription = "Video demonstrasi",
+                    tint = Color.White,
+                    modifier = Modifier.size(64.dp),
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Unduh untuk menonton video ini",
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
         }
+
+        DownloadIconButton(
+            state = download,
+            onDownload = onDownload,
+            modifier = Modifier.align(Alignment.TopEnd),
+            contentDescription = if (isVideo) "Unduh video ke galeri" else "Unduh foto ke galeri",
+        )
+    }
+}
+
+/**
+ * The proof this parent already sent for this date.
+ *
+ * `dokumentasi` was write-only until now — uploaded, then gone from the UI forever. Older
+ * completions can still have no `dokumentasi_id`, so this section simply does not appear for them.
+ */
+@Composable
+private fun SubmittedProof(
+    proof: Documentation,
+    proofUrl: String?,
+    download: MediaDownloadState,
+    onDownload: () -> Unit,
+) {
+    Text("Bukti yang Anda kirim", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF23323A)),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (proofUrl != null && proof.mediaKind != "video") {
+            AsyncImage(
+                model = proofUrl,
+                contentDescription = "Bukti yang dikirim",
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    Icons.Filled.PlayCircle,
+                    contentDescription = "Video bukti",
+                    tint = Color.White,
+                    modifier = Modifier.size(56.dp),
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Unduh untuk menonton",
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+
+        DownloadIconButton(
+            state = download,
+            onDownload = onDownload,
+            modifier = Modifier.align(Alignment.TopEnd),
+            contentDescription = "Unduh bukti ke galeri",
+        )
+    }
+    proof.keterangan?.let {
+        Text(it, style = MaterialTheme.typography.bodyMedium, color = MutedText)
     }
 }
 
