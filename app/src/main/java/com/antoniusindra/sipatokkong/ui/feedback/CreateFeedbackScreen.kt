@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -23,6 +24,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -50,9 +53,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.antoniusindra.sipatokkong.data.model.FeedbackChallenge
+import com.antoniusindra.sipatokkong.data.model.FeedbackMood
 import com.antoniusindra.sipatokkong.ui.theme.BrandOrange
 import com.antoniusindra.sipatokkong.ui.theme.BrandOrangeLight
+import com.antoniusindra.sipatokkong.ui.theme.AppBackground
 import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
+import com.antoniusindra.sipatokkong.ui.theme.IconBoxBg
+import com.antoniusindra.sipatokkong.ui.theme.MutedText
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -65,13 +73,13 @@ fun CreateFeedbackScreen(
 
     LaunchedEffect(ui.isSuccess) {
         if (ui.isSuccess) {
-            Toast.makeText(context, "Catatan terhasil disimpan!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Catatan berhasil disimpan!", Toast.LENGTH_SHORT).show()
             onBack()
         }
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = AppBackground,
         topBar = {
             TopAppBar(
                 title = { Text("Catatan Perkembangan Anak", fontWeight = FontWeight.Bold) },
@@ -81,7 +89,7 @@ fun CreateFeedbackScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
+                    containerColor = AppBackground,
                     titleContentColor = BrandTeal,
                     navigationIconContentColor = BrandTeal,
                 )
@@ -97,36 +105,41 @@ fun CreateFeedbackScreen(
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             // Section 1: Mood / Kondisi Umum
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Carded like every other parent surface. This screen was the only one in the app whose
+            // sections floated bare on the background, which is why it read as a different app.
+            SectionCard {
                 Text(
                     "Bagaimana kondisi Si Kecil hari ini?",
-                    style = MaterialTheme.typography.titleMedium,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    MoodItem("Senang", "😊", ui.mood == "Senang") { viewModel.onMoodChange("Senang") }
-                    MoodItem("Biasa", "😐", ui.mood == "Biasa") { viewModel.onMoodChange("Biasa") }
-                    MoodItem("Rewel", "😢", ui.mood == "Rewel") { viewModel.onMoodChange("Rewel") }
-                    MoodItem("Sakit", "🤒", ui.mood == "Sakit") { viewModel.onMoodChange("Sakit") }
+                    FeedbackMood.ALL.forEach { mood ->
+                        MoodItem(
+                            label = mood,
+                            emoji = FeedbackMood.emojiOf(mood),
+                            isSelected = ui.mood == mood,
+                            onClick = { viewModel.onMoodChange(mood) },
+                        )
+                    }
                 }
             }
 
             // Section 2: Quick Challenges
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SectionCard {
                 Text(
                     "Apakah ada kendala saat terapi?",
-                    style = MaterialTheme.typography.titleMedium,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.Bold
                 )
-                val challenges = listOf("Sulit Fokus", "Mudah Lelah", "Menolak Latihan", "Lancar", "Banyak Kemajuan")
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    challenges.forEach { tag ->
+                    FeedbackChallenge.ALL.forEach { tag ->
                         val selected = ui.selectedChallenges.contains(tag)
                         FilterChip(
                             selected = selected,
@@ -149,11 +162,18 @@ fun CreateFeedbackScreen(
             }
 
             // Section 3: Additional Notes
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SectionCard {
                 Text(
                     "Catatan Tambahan (Opsional)",
-                    style = MaterialTheme.typography.titleMedium,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.Bold
+                )
+                Text(
+                    // Says why it is worth the typing: left blank, the note is stored under a
+                    // generic label and every such note looks the same in the list afterwards.
+                    "Kalau diisi, catatan ini yang muncul sebagai judul di daftar.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MutedText,
                 )
                 OutlinedTextField(
                     value = ui.isi,
@@ -161,7 +181,7 @@ fun CreateFeedbackScreen(
                     placeholder = { Text("Ceritakan lebih detail tentang perkembangan atau kendala anak...") },
                     minLines = 4,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(16.dp)
                 )
             }
 
@@ -202,6 +222,28 @@ fun CreateFeedbackScreen(
     }
 }
 
+/**
+ * One section of the form, in the app's card idiom: white, 16dp radius, 2dp elevation.
+ *
+ * Written once here rather than repeated three times, and deliberately not exported -- the form is
+ * the only place that stacks sections like this.
+ */
+@Composable
+private fun SectionCard(content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            content = content,
+        )
+    }
+}
+
 @Composable
 fun MoodItem(
     label: String,
@@ -221,7 +263,8 @@ fun MoodItem(
             modifier = Modifier
                 .size(64.dp)
                 .background(
-                    if (isSelected) BrandOrangeLight else Color(0xFFF5F5F5),
+                    // IconBoxBg, not a raw hex that appears nowhere in the palette.
+                    if (isSelected) BrandOrangeLight else IconBoxBg,
                     CircleShape
                 )
                 .border(
@@ -237,7 +280,7 @@ fun MoodItem(
             label,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-            color = if (isSelected) BrandOrange else Color.Black
+            color = if (isSelected) BrandOrange else MutedText
         )
     }
 }

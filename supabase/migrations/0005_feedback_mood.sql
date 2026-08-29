@@ -1,0 +1,16 @@
+-- ------------------------------------------------------------------
+-- 0005: declare feedback.mood in the repo
+-- ------------------------------------------------------------------
+-- `mood` has been written on every parent feedback insert since the behavior-note feature landed
+-- (commit e7cd324) -- it is a required field on the form -- but it never made it into a migration.
+-- The column exists in the live project because it was added by hand through the Supabase
+-- dashboard, so 0001 no longer describes production. A database rebuilt from these migrations
+-- alone would reject every catatan perilaku with PGRST204.
+--
+-- `text`, not an enum, for the same reason `tugas.alat_bantu` is `text[]`: the option list lives as
+-- an app constant (`FeedbackMood`), so adding a fifth mood should cost an APK release and nothing
+-- more. An enum would make it cost a migration too.
+--
+-- `if not exists` so this is safe to run against the live project, where the column is already
+-- there. It changes nothing; it only makes the repo tell the truth.
+alter table public.feedback add column if not exists mood text;

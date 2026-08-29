@@ -32,6 +32,14 @@ import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Title
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
@@ -57,8 +65,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.heading
@@ -78,6 +88,7 @@ import com.antoniusindra.sipatokkong.core.recurrence.labelId
 import com.antoniusindra.sipatokkong.data.model.MediaKind
 import com.antoniusindra.sipatokkong.data.model.TaskPriority
 import com.antoniusindra.sipatokkong.data.model.TeachingAid
+import com.antoniusindra.sipatokkong.ui.theme.MutedText
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -86,6 +97,10 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun CreateTaskScreen(
     onBack: () -> Unit,
+    /** When set, the form opens prefilled from that template. Everything stays editable. */
+    templateId: String? = null,
+    /** When set, the form opens with this child already chosen. Still editable. */
+    anakId: String? = null,
     viewModel: CreateTaskViewModel = viewModel(factory = CreateTaskViewModel.Factory),
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
@@ -93,9 +108,29 @@ fun CreateTaskScreen(
 
     var instruksiValue by remember { mutableStateOf(TextFieldValue(ui.instruksi)) }
 
+    LaunchedEffect(templateId) {
+        if (templateId != null) viewModel.applyTemplate(templateId)
+    }
+
+    LaunchedEffect(anakId) {
+        if (anakId != null) viewModel.preselectChild(anakId)
+    }
+
+    // The template fills `instruksi` in the ViewModel, but the text field's own TextFieldValue is
+    // seeded once and owns the cursor, so it has to be told separately or the box stays empty.
+    LaunchedEffect(ui.instruksi) {
+        if (ui.instruksi != instruksiValue.text) {
+            instruksiValue = TextFieldValue(ui.instruksi)
+        }
+    }
+
     LaunchedEffect(ui.isSuccess) {
         if (ui.isSuccess) {
-            Toast.makeText(context, "Program ajar berhasil dibuat!", Toast.LENGTH_SHORT).show()
+            // A template failure still leaves a created program, so say what actually happened
+            // rather than the cheerful default -- and give it longer to be read.
+            val message = ui.templateWarning ?: "Program ajar berhasil dibuat!"
+            val length = if (ui.templateWarning != null) Toast.LENGTH_LONG else Toast.LENGTH_SHORT
+            Toast.makeText(context, message, length).show()
             onBack()
         }
     }
@@ -197,9 +232,12 @@ fun CreateTaskScreen(
             // ---- Upload media (wajib) ----
             SectionLabel("Foto/Video Demonstrasi*")
             MediaPickerBox(
-                mediaUri = ui.mediaUri,
+                hasMedia = ui.hasMedia,
+                previewUrl = ui.mediaUri ?: ui.templateMediaPreviewUrl,
                 mediaKind = ui.mediaKind,
-                mediaName = ui.mediaName,
+                mediaName = ui.templateMediaLabel
+                    ?.let { "Dari template \"$it\" — ketuk untuk ganti" }
+                    ?: ui.mediaName,
                 onPick = {
                     mediaPicker.launch(
                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
@@ -306,6 +344,73 @@ fun CreateTaskScreen(
                 DeadlineField(
                     deadline = ui.deadline,
                 )
+            }
+
+            // ---- Template ----
+            // A card, not the bare checkbox row this used to be. It was the only section of this
+            // form without a SectionLabel and without any container, so on a three-screen scroll it
+            // read as a footnote to the submit button rather than a feature -- which is exactly how
+            // it kept getting missed.
+            SectionLabel("Template")
+            if (ui.hasTemplateForThisJudul) {
+                // Replaced, not silently removed: UI that vanishes without explanation is worse
+                // than UI that explains itself.
+                Text(
+                    "Sudah ada template untuk judul ini.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MutedText,
+                )
+            } else {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { viewModel.onSaveAsTemplateChange(!ui.saveAsTemplate) },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(
+                                checked = ui.saveAsTemplate,
+                                onCheckedChange = viewModel::onSaveAsTemplateChange,
+                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    "Simpan juga sebagai template",
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    "Supaya bisa dipakai lagi tanpa mengetik ulang.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MutedText,
+                                )
+                            }
+                        }
+                        if (ui.saveAsTemplate) {
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = ui.templateName,
+                                onValueChange = viewModel::onTemplateNameChange,
+                                // Optional now, not required: it arrives prefilled from the judul,
+                                // and a blank one falls back to the judul rather than blocking the
+                                // save the way it used to.
+                                label = { Text("Nama Template (opsional)") },
+                                placeholder = { Text(ui.judul.ifBlank { "mis. Latihan Vokal A-I-U" }) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                supportingText = {
+                                    // Templates are shared across the whole foundation, and so is
+                                    // their media. Say so here rather than in a doc nobody opens.
+                                    Text("Template dan foto/videonya bisa dilihat semua relawan.")
+                                },
+                            )
+                        }
+                    }
+                }
             }
 
             if (ui.error != null) {
@@ -584,9 +689,17 @@ internal fun ChildDropdown(
     }
 }
 
+/**
+ * @param hasMedia whether demo media is attached at all, from either source. Kept separate from
+ *   [previewUrl] because a template's signed URL arrives asynchronously: without this the box would
+ *   fall back to "Ketuk untuk pilih" for a second and read as if the media had been lost.
+ * @param previewUrl what to render as the thumbnail -- a local content Uri for a picked file, a
+ *   signed URL for media inherited from a template.
+ */
 @Composable
-internal fun MediaPickerBox(
-    mediaUri: String?,
+private fun MediaPickerBox(
+    hasMedia: Boolean,
+    previewUrl: String?,
     mediaKind: MediaKind?,
     mediaName: String?,
     onPick: () -> Unit,
@@ -595,31 +708,32 @@ internal fun MediaPickerBox(
     emptyPrompt: String = "Ketuk untuk pilih foto/video",
     formatHint: String = "JPG, WebP, atau MP4",
 ) {
+    val showsImage = hasMedia && mediaKind == MediaKind.IMAGE && previewUrl != null
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(if (mediaUri != null && mediaKind == MediaKind.IMAGE) 200.dp else 120.dp)
+            .height(if (showsImage) 200.dp else 120.dp)
             .clickable { onPick() },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         when {
-            mediaUri != null && mediaKind == MediaKind.IMAGE -> {
+            showsImage -> {
                 AsyncImage(
-                    model = mediaUri,
+                    model = previewUrl,
                     contentDescription = "Pratinjau media",
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(160.dp),
                 )
                 Spacer(Modifier.height(4.dp))
-                Text("Ketuk untuk ganti", style = MaterialTheme.typography.labelMedium)
+                Text(mediaName ?: "Ketuk untuk ganti", style = MaterialTheme.typography.labelMedium)
             }
 
-            mediaUri != null && mediaKind == MediaKind.VIDEO -> {
+            hasMedia -> {
                 Icon(Icons.Filled.Movie, contentDescription = null, modifier = Modifier.size(40.dp))
                 Spacer(Modifier.height(8.dp))
-                Text(mediaName ?: "Video terpilih")
+                Text(mediaName ?: "Media terpilih")
                 Text("Ketuk untuk ganti", style = MaterialTheme.typography.labelMedium)
             }
 

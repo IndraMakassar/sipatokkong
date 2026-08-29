@@ -7,7 +7,9 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
 import com.antoniusindra.sipatokkong.data.model.ChildOption
+import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.data.model.Task
+import com.antoniusindra.sipatokkong.data.model.TaskTemplateInsert
 import com.antoniusindra.sipatokkong.data.repository.ChildRepository
 import com.antoniusindra.sipatokkong.data.repository.TaskRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +25,10 @@ data class ProgramListUiState(
     val today: LocalDate = LocalDate.now(),
     val isLoading: Boolean = true,
     val stoppingId: String? = null,
+    /** Id of the program currently being turned into a template, if any. */
+    val savingTemplateFor: String? = null,
+    /** Set briefly after a template is saved, so the screen can confirm it. */
+    val templateSavedName: String? = null,
     /** A failed *load*. Replaces the list, because there is nothing to show. */
     val error: String? = null,
     /**
@@ -44,6 +50,7 @@ data class ProgramListUiState(
 class ProgramListViewModel(
     private val taskRepository: TaskRepository,
     private val childRepository: ChildRepository,
+    private val sessionManager: SessionManager,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProgramListUiState())
@@ -97,6 +104,44 @@ class ProgramListViewModel(
         }
     }
 
+    /**
+     * Turns an existing program into a reusable template.
+     *
+     * Cheapest possible path: the demo media is copied `tugas-demo` -> `tugas-template` on the
+     * server, so nothing is downloaded or uploaded from the phone at all.
+     *
+     * `TaskTemplateInsert.from` is what drops anak_id and every date — the split between the
+     * exercise and this particular delivery of it lives there, next to a test, rather than here.
+     */
+    fun saveAsTemplate(task: Task, nama: String) {
+        val relawanId = (sessionManager.state.value as? SessionManager.State.SignedIn)?.profile?.id
+        if (relawanId == null) {
+            _uiState.update { it.copy(actionError = "Sesi tidak valid. Silakan login ulang.") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(savingTemplateFor = task.id, actionError = null) }
+            runCatching {
+                val path = taskRepository.copyDemoToTemplate(task.mediaPath, relawanId)
+                taskRepository.createTemplate(TaskTemplateInsert.from(task, nama, relawanId, path))
+            }.onSuccess {
+                _uiState.update {
+                    it.copy(savingTemplateFor = null, templateSavedName = nama.trim())
+                }
+            }.onFailure { e ->
+                // actionError, not error: the list stays on screen.
+                _uiState.update {
+                    it.copy(
+                        savingTemplateFor = null,
+                        actionError = e.message ?: "Gagal membuat template",
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissTemplateSaved() = _uiState.update { it.copy(templateSavedName = null) }
+
     fun dismissActionError() = _uiState.update { it.copy(actionError = null) }
 
     companion object {
@@ -105,6 +150,7 @@ class ProgramListViewModel(
                 ProgramListViewModel(
                     taskRepository = ServiceLocator.taskRepository,
                     childRepository = ServiceLocator.childRepository,
+                    sessionManager = ServiceLocator.sessionManager,
                 )
             }
         }

@@ -7,8 +7,8 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 
 ### ✅ Built / Completed
 *   **Infrastructure:** Supabase project setup, database schema, RLS policies, and storage bucket
-    configurations. Migrations `0001` through `0004` are applied to the live project.
-    **`0005` (presensi unique index) is written but NOT yet applied** — apply it before merging.
+    configurations. Migrations `0001` through `0004` are all applied to the live project;
+    `0005` and `0006` are written but **not yet run**.
 *   **Authentication:** Phone Number + PIN login flow mapped to Supabase Auth. Role-based routing (Admin, Parent, Volunteer).
 *   **Admin Features:**
     *   Create Parent/Volunteer accounts (via `noSessionClient` to preserve admin session).
@@ -22,15 +22,14 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
     *   Basic notification list screen.
 *   **Volunteer Features:**
     *   Create Task (Program Ajar) with media upload and rich text instructions.
+    *   Reusable program-ajar templates, shared across volunteers: save one from the create form
+        or from an existing program, then start a new program from it without re-uploading media.
+    *   Home screen "Anak Binaan Saya": one card per assigned child with age, parent, condition
+        note and running-programme count; tapping one opens the create form with that child set.
     *   Recurring programs (daily / weekly / monthly / every-N-days) with an end date, plus a
         "Program Ajar Saya" screen for stopping a running program.
-    *   Presensi: "Catat Kunjungan" form (child, date, session note, mandatory compressed proof
-        photo) plus a Presensi tab listing the volunteer's own visit history.
-*   **Media:** Any photo/video (demo tugas, parent documentation, presensi) can be downloaded to
-    the phone's gallery — `Pictures/Sipatokkong` and `Movies/Sipatokkong`.
-*   **Communication:** Feedback threads for parent-volunteer interaction.
-*   **Admin Reporting:** Rekap Absensi Relawan — visits per volunteer over a date range, with
-    volunteers who logged nothing shown at zero.
+*   **Communication:** Feedback threads for parent-volunteer interaction, with one-tap quick
+    replies for the volunteer and a triaged inbox ("Perlu Ditanggapi" / "Sudah Beres").
 
 ### 🚧 In Progress / Partially Built
 *   **Media Compression:** Wired up for the presensi photo upload only (`core/media/ImageCompressor`).
@@ -82,6 +81,112 @@ Keeping finished cards on the list only works if they sink below what still need
 otherwise a completed high-priority task would push an unfinished medium-priority one out of
 sight, which defeats the point of showing them at all.
 
+### How a behavior note gets closed
+
+`feedback.status` is the enum `('open', 'in_process', 'answered')`, default `'open'`. The **only**
+thing that advances it is a reply written by a **relawan**, via the `on_balasan_insert` trigger in
+`supabase/migrations/0001_initial_schema.sql:386-402`, which sets `status = 'answered'`,
+`answered_at = now()`, and inserts the parent's notification.
+
+Consequences that follow from that, and are easy to re-derive wrongly:
+
+*   **A parent's own reply changes nothing** - not the status, and no notification to the volunteer.
+    A thread cannot be reopened once answered.
+*   **`'in_process'` is unreachable.** No trigger and no client code writes it. The chip that
+    rendered it was removed; the enum value is left in Postgres because dropping it would cost a
+    migration for no gain.
+*   **A note with nothing to ask still needs closing.** There is no acknowledge-without-replying
+    path, by design - see the quick-replies entry in the Change Log for why.
+
+### Which notes a volunteer sees first
+
+`FeedbackTriage.needsAttention` in `ui/feedback/FeedbackTriage.kt`. A note is work when it is
+**not** answered **and** either its `mood` is `Rewel`/`Sakit`, or its `kendala` contains one of the
+three difficulty chips.
+
+The trap: **`kendala` is almost never empty**, so "has a kendala" is not a signal. Two of the five
+chips that write that column - `Lancar` and `Banyak Kemajuan` - report that things went *well*.
+The concerning set is spelled out explicitly in `FeedbackChallenge.CONCERNING`.
+
+The second tab is **"Sudah Beres"**, and `FeedbackTriage.settled` is what fills it. It was first
+called "Kabar Baik", which was wrong: because `needsAttention` returns false for anything answered,
+a note about a sick child moves into that tab the moment the volunteer replies. The bucket is
+"nothing to do right now", not "good news" - keep any future renaming honest about that.
+
+### The chip on a feedback row
+
+`FeedbackTriage.stateOf` returns one of three states, and **both the chip and the tabs derive from
+it**:
+
+| State | Chip | When |
+|---|---|---|
+| `DIJAWAB` | "Dijawab" (green) | `status == 'answered'` |
+| `PERLU_DIBALAS` | "Perlu Dibalas" (orange) | `needsAttention` is true |
+| `KABAR_BAIK` | "Kabar Baik" (teal) | neither - positive and unanswered |
+
+This sharing is the point, not a convenience. The chip used to read `feedback.status` alone while
+the tabs read `needsAttention`, so a positive unanswered note sat under "Sudah Beres" wearing an
+orange "Menunggu" - the row contradicting the tab directly above it. `FeedbackDisplayTest` asserts
+`stateOf(fb) == PERLU_DIBALAS` **if and only if** `needsAttention(fb)`, so that split cannot come
+back silently.
+
+Note the two `stateOf` branches are independent, not ordered: `needsAttention` already returns false
+for anything answered, so swapping them changes nothing. (An earlier version of this document
+claimed the order was load-bearing. It is not - proved by swapping it and watching the tests stay
+green.)
+
+### What a feedback row is titled
+
+`FeedbackSummary.headlineOf`: the free text if the parent actually typed some, else the kendala
+chips, else the mood label, else "Catatan".
+
+The trap: **`isi` is a poor headline on its own.** "Catatan Tambahan" is optional, `isi` is
+`not null` in Postgres, and `CreateFeedbackViewModel` bridges the gap by backfilling the constant
+`CATATAN_RUTIN`. Using `isi` directly - which the list did - made every chip-only note render with
+an identical title. `subtitleOf` returns null when the chips were promoted to the headline, so they
+never appear twice on one row.
+
+### What a program-ajar template carries
+
+`tugas_template` (migration `0006`) stores **the exercise** and nothing about the delivery. The
+split is enforced by two pure functions, not by convention: `TaskTemplateInsert.from`
+(`data/model/TaskTemplate.kt`) going in, and `applyTemplate` (`ui/volunteer/TemplateForm.kt`)
+coming out. `TaskTemplateTest` holds both to it.
+
+| Field | In the template? |
+|---|---|
+| `judul`, `instruksi`, `priority_level`, `alat_bantu` | Yes |
+| `media_kind` + `media_path` | Yes - the main reason the feature exists |
+| `recurrence` + `_days` / `_day_of_month` / `_interval` | Yes, the **pattern** only |
+| `anak_id` | **No** - asked every time; this is the point |
+| `deadline`, `starts_on`, `ends_on` | **No** - always relative to now |
+| `status`, `week_of`, `stopped_at` | **No** - belong to one program, not the recipe |
+
+Applying a template only **prefills the existing create form**. Every field stays editable, and a
+recurring template defaults `starts_on` to today exactly as picking the pattern by hand does, while
+leaving `ends_on` blank because it is required and nobody has chosen it yet.
+
+### Why template media needs its own bucket
+
+Access to `tugas-demo` is decided by the **first path segment being a child's UUID**
+(`storage_child_id` + the `tugasdemo_*` policies, `0001_initial_schema.sql:404-461`). That makes it
+the wrong home for shared template media, twice over:
+
+*   A volunteer **not** assigned to the origin child cannot read it, so applying someone else's
+    template would fail.
+*   The target child's **parent** could not open the demo, because the path would still name a
+    different child - and the parent's app calls `signedDemoUrl` itself.
+
+So media makes two server-side copies and never passes through a phone twice:
+
+```
+save    tugas-demo/{anak_A}/...        -> tugas-template/{relawan_A}/...
+apply   tugas-template/{relawan_A}/... -> tugas-demo/{anak_B}/...
+```
+
+The second copy is **required, not an optimisation** - it is what puts the object under the new
+child so `is_parent_of` admits their parent.
+
 ## Known Limitations
 
 *   **The history screen only covers the last 30 days.** `history` is derived from the same
@@ -97,102 +202,334 @@ sight, which defeats the point of showing them at all.
 
 ## Change Log
 
-### [2026-08-27] - Presensi: Switch from Gallery to Camera
-* **What changed:** The proof photo for volunteer visits is now captured directly using the camera instead of being picked from the gallery.
-* **Implementation:**
-    *   Added `FileProvider` to `AndroidManifest.xml` with authority `${applicationId}.fileprovider`.
-    *   Created `res/xml/file_paths.xml` for temporary camera storage.
-    *   Implemented `CameraUriManager` to handle temporary `Uri` generation.
-    *   Updated `CreatePresensiScreen.kt` to use `ActivityResultContracts.TakePicture()` and managed the temporary `Uri` with `rememberSaveable`.
-    *   Fixed `meta-data` name in `AndroidManifest.xml` to `android.support.FILE_PROVIDER_PATHS`.
-* **Verified:** `assembleDebug` succeeded; `CameraUriManager` and `CreatePresensiScreen` compile correctly.
-* **Not yet verified:** Runtime camera capture, `FileProvider` permission handling on physical devices, and photo saving to the temporary URI.
+### [2026-08-29] - The Parent's Feedback View, and a Contradiction I Introduced
+* **The contradiction was mine, from the previous change.** A row could read "Sudah Beres" in its
+    tab and orange "Menunggu" in its chip at the same time, because the two came from different
+    notions: the chip from `feedback.status`, the tabs from `needsAttention`. A positive unanswered
+    note satisfies both. I had offered "Tidak Mendesak" the day before precisely to avoid this, then
+    shipped "Sudah Beres" without checking it against the chip.
+* **Fixed by removing the second source, not by rewording.** `FeedbackTriage.stateOf` now returns
+    `DIJAWAB` / `PERLU_DIBALAS` / `KABAR_BAIK`, and the chip and the tabs both derive from it. See
+    the Product Rules table above. A three-state chip also helps the **parent**: their happy report
+    no longer wears a nagging orange "Menunggu" - the same problem the quick-replies change existed
+    to solve.
+* **Rows could all be titled identically.** `FeedbackRow` used `fb.isi`, but "Catatan Tambahan" is
+    optional and gets backfilled with a constant, so a parent who reports with mood + chips - the
+    quickest way to use the form, hence the common one - got a list where every row read the same.
+    `FeedbackSummary.headlineOf` now picks the most specific thing the note actually says, and the
+    literal was lifted to a named `CATATAN_RUTIN` so the writing and display sides cannot drift.
+* **Dates were raw ISO.** The list printed `createdAt.take(10)` - "2026-08-29". New
+    `core/util/DateDisplay.kt` gives "Hari Ini" / "Kemarin" / "29 Agu 2026", returning **null** for
+    an unusable value so the line disappears instead of showing something meaningless. It replaces
+    `ProgramListScreen`'s private `ShortDate`, so this removes a duplicate rather than adding a
+    sixth date formatter to the five that already existed.
+* **The feedback area was wallpaper-coloured.** All three screens used
+    `MaterialTheme.colorScheme.background`, and `dynamicColor` is still `true`, so on Android 12+
+    they rendered in the user's wallpaper palette instead of `AppBackground` - which is exactly why
+    they looked unlike the rest of the app. Now they import the brand colours directly, the same
+    workaround `ParentHomeScreen` and `VolunteerHomeScreen` already use. `Theme.kt` is untouched.
+* **The thread screen was hiding data it had already fetched.** `FeedbackReply.createdAt` was read
+    from the database and never rendered, so a parent could not tell an hour-old reply from a
+    three-week-old one; the note's own date and status were likewise unused despite being in hand.
+    All three now show. `ReplyBubble` used `weight(1f)`, which stretched a one-word reply to full
+    width - a block, not a bubble; now `weight(1f, fill = false)`.
+* **The form was the only parent screen with no cards at all**, floating three bare sections on the
+    background. Now carded like everything else, with the off-palette `Color(0xFFF5F5F5)` and
+    `Color.Black` replaced by `IconBoxBg` and `MutedText`. Also fixes the typo "Catatan **terhasil**
+    disimpan!", and adds a line explaining that filling in the note is what gives it a title later.
+* **A claim of mine turned out to be false, and the test proved it.** I wrote in the code that
+    `stateOf`'s branch order was load-bearing. Swapping the branches left every test green, because
+    `needsAttention` already returns false for answered notes - the branches are independent. The
+    comment is corrected rather than left as confident-sounding fiction.
+* **Tests:** 140 total, up from 128 (12 new in `FeedbackDisplayTest`). **Verified by reintroducing
+    the original defects:** making the chip read `status` alone broke 2 tests including the
+    if-and-only-if invariant, and dropping the `CATATAN_RUTIN` check broke 3.
+* **Verified:** clean `assembleDebug` + `testDebugUnitTest` with **zero compiler warnings**.
+* **Not yet verified - nothing seen on screen.** The emulator session ended during an earlier
+    reinstall and no credentials are available from this machine. Ideally checked with a **parent**
+    account, since that is what was asked for. Unproven: that rows are no longer identical, that
+    dates read "Hari Ini", that the background is grey rather than lavender, that no "Menunggu" chip
+    survives inside the "Sudah Beres" tab, and that short replies now look like bubbles.
+* **`FeedbackListScreen` is shared**, so the volunteer's feedback tab gets the new colours and the
+    three-state chip too.
 
-### [2026-08-26] - Semua Media Bisa Diunduh ke Galeri HP
-* **Yang diminta:** setiap gambar/video bisa diunduh dan tersimpan di HP. Inventarisnya mengubah
-    bentuk pekerjaan: **tiga dari empat permukaan media tidak pernah ditampilkan sama sekali**, jadi
-    sebagian besar kerjanya adalah memunculkan media yang selama ini tersembunyi.
-* **`dokumentasi` berhenti jadi write-only.** Bukti yang dikirim orang tua selama ini diunggah lalu
-    hilang dari UI selamanya — tidak ada read model, tidak ada signed URL, tidak ada layar.
-    Sekarang ada model `Documentation`, `signedDocumentationUrl`, `getDocumentation`, dan bagian
-    "Bukti yang Anda kirim" di `TaskDetailScreen` untuk tugas yang sudah selesai. **Tanpa migrasi** —
-    policy `dokumentasi_read` sudah mengizinkannya sejak `0001`.
-* **Foto presensi akhirnya terlihat.** `PresensiRepository.signedFotoUrl` selama ini kode mati
-    dengan nol pemanggil. Kartu kunjungan kini mengembang di tempat untuk menampilkan fotonya —
-    dimuat **hanya saat kartu dibuka**, karena tidak ada apa pun yang menulis `foto_thumb_path`,
-    jadi daftar bertumpuk thumbnail berarti mengunduh semua foto ukuran penuh hanya untuk menggulir.
-* **Video demo bisa ditonton, tanpa menambah pemutar.** Video wajib diunggah tapi selama ini
-    mustahil dilihat — hanya ikon `PlayCircle` mati. Sekarang bisa diunduh ke `Movies/Sipatokkong`
-    dan ditonton lewat aplikasi galeri bawaan. **Pemutar video di dalam aplikasi tetap tidak ada;
-    unduhan adalah jalan keluarnya, bukan pemutar.**
-* **Dua cabang penyimpanan, keduanya wajib di minSdk 27.** API 29+ menulis lewat `MediaStore`
-    dengan `RELATIVE_PATH` + `IS_PENDING`, tanpa izin apa pun. API 27–28 menulis ke direktori publik
-    (butuh `WRITE_EXTERNAL_STORAGE`, dideklarasikan dengan `maxSdkVersion="28"`) lalu memanggil
-    `MediaScannerConnection` — tanpa pemindaian itu file ada di disk tapi tak pernah muncul di
-    Galeri, yang akan terbaca pengguna sebagai "unduhannya gagal". Ini **permintaan izin runtime
-    pertama** di aplikasi ini.
-* **Video dikonfirmasi dulu dengan ukurannya**, foto langsung. `tugas-demo` mengizinkan 50 MB dan
-    hemat data adalah syarat keras project ini; dialog untuk foto 200 KB cuma gesekan.
-* **Streaming, bukan `ByteArray`.** `downloadAuthenticated(path): ByteArray` ada dan lebih pendek,
-    tapi menahan video 50 MB di RAM berisiko OOM justru di HP kelas bawah yang jadi sasaran. Jalur
-    yang dipakai `downloadAuthenticatedToAsFlow` → file cache → stream ke MediaStore, dengan progres
-    nyata dari `DownloadStatus.Progress`.
-* **Satu mesin state, bukan tiga.** `MediaDownloadHandler` disusun ke dalam ViewModel yang butuh,
-    supaya tiga layar tidak menyalin enam puluh baris yang sama. Kegagalan unduh memakai jalurnya
-    sendiri — satu unduhan gagal tidak boleh menghapus layar yang sedang dilihat.
-* **Verified:** `assembleDebug` hijau; **132 tes unit lulus, 17 baru**. Tiga aturan dibuktikan
-    dengan membalik kodenya: fallback ekstensi tak dikenal (1 gagal), locale eksplisit pada format
-    ukuran (2 gagal), dan konfirmasi sebelum unduh video (1 gagal).
-* **Not yet verified — semua yang runtime.** Tidak ada satu file pun yang benar-benar pernah
-    terunduh dari mesin ini. Yang paling rawan dan belum tersentuh: **cabang API 27–28** — dialog
-    izin, penulisan ke direktori publik, dan `MediaScannerConnection`. Belum diuji juga: file
-    muncul di album Galeri, video hasil unduhan benar-benar bisa diputar, penamaan anti-tabrakan
-    di jalur legacy, dan perilaku saat koneksi putus di tengah unduhan.
+### [2026-08-29] - "Kabar Baik" Was Not Always Good News
+* **The label was inaccurate, not just plain.** `FeedbackTriage.needsAttention` returns false for
+    **anything answered**, so a note reading "anak demam, terapi dilewat" moved into the "Kabar
+    Baik" tab the moment the volunteer replied to it. The tab holds "nothing to do right now",
+    which is not the same thing as good news.
+* **Renamed to "Sudah Beres"**, and `FeedbackTriage.goodNews` renamed to `settled` - the function
+    name carried the same wrong idea, and leaving it would have re-seeded the mistake for the next
+    reader.
+* **Both empty states rewritten.** The second tab's subtitle was the generic `emptyText` ("Belum
+    ada catatan dari orang tua."), which is impossible at that point: the `ui.items.isEmpty()`
+    branch above already catches "no notes at all", so an empty second tab means every note is
+    sitting in the first one. It now says so: "Semua catatan masih menunggu tanggapan Anda."
+* **Deliberately kept at two tabs.** Splitting answered-but-concerning notes into a third tab would
+    make "Kabar Baik" literally true, but three labels do not fit a narrow phone and this app's
+    users are low-literacy. Two honest labels beat three precise ones here.
+* **Verified:** clean `assembleDebug` + `testDebugUnitTest` green with **zero compiler warnings**;
+    128 tests still pass, `FeedbackTriageTest` updated to the new name.
+* **Not yet verified:** nothing seen on screen. The emulator session ended during an earlier
+    reinstall and no credentials are available from this machine. The triage tabs *were* seen
+    working before this rename ("Perlu Ditanggapi (0)" / "Kabar Baik (2)"), so only the new strings
+    and the new empty-state subtitle are unproven.
 
-### [2026-08-25] - Presensi: The Volunteer's Attendance Form + Admin Recap
-* **The gap:** `presensi` shipped complete in migration `0001` — table, indexes, RLS, a private
-    storage bucket, even a `notif_type` value — and then nothing was ever built against it. Not one
-    Kotlin file mentioned it. The status doc listed it as "In Progress", which read as half-built
-    when the client side was at zero.
-* **What was added:** a "Catat Kunjungan" form for the volunteer (child, date defaulting to today,
-    session note, mandatory proof photo), a "Presensi" tab holding their own visit history, and an
-    admin **Rekap Absensi Relawan** screen — visits per volunteer over a date range.
-* **Compression stopped being optional.** `id.zelory:compressor` has been declared in
-    `libs.versions.toml` since the start and never imported; nothing needed it, because
-    `tugas-demo` allows 50 MB. The `presensi` bucket allows **6 MB and images only**, and a modern
-    phone photo routinely exceeds that — so without compression this feature would simply fail on
-    real devices. `core/media/ImageCompressor` re-encodes to JPEG at ≤200 KB, which is also what
-    the bandwidth budget asked for all along.
-* **Migration `0005` adds one unique index** on `(relawan_id, anak_id, tanggal)`. There was no
-    constraint at all, so a double tap wrote two rows and inflated every recap number — and
-    `presensi` deliberately has no DELETE policy, so a duplicate could never be removed from the
-    app. The client maps the resulting `23505` to "Kunjungan untuk anak ini pada tanggal tersebut
-    sudah dicatat." rather than surfacing a raw Postgrest error. Same reasoning, same shape as the
-    constraint `0002` put on `tugas_penyelesaian`.
-* **The upload path is now shared, not copied.** `TaskRepository.uploadTo` was the only
-    implementation of the `{anak_id}/{yyyy}/{MM}/{uuid}.{ext}` convention, and getting the first
-    segment wrong makes *every* storage policy reject the upload. It moved to
-    `data/repository/StorageUpload.kt` and both repositories call it. Likewise `SectionLabel`,
-    `ChildDropdown`, `DeadlineField` and `MediaPickerBox` went from `private` to `internal` in
-    `CreateTaskScreen` so the presensi form reuses them — the duplication debt this file already
-    carries was not worth doubling.
-* **The recap is built from the volunteer list, not from the presensi rows.** Grouping the rows
-    would drop every volunteer who visited nobody — precisely the entry the foundation opens this
-    screen to find. There is a test that fails if anyone "simplifies" it back.
-* **History rows are text-only, on purpose.** Nothing in this app writes `foto_thumb_path`, so a
-    thumbnail list would download every full-size proof photo to render — the opposite of the
-    data-frugality rule. A chip says a photo exists; the photo is not re-fetched.
-* **Verified:** `assembleDebug` green; **115 unit tests pass, 25 new**. Three rules were confirmed
-    by reverting the code and watching the tests fail: the inclusive date range (1 failure), the
-    recap being built from the volunteer list (7 failures), and `canSubmit` requiring a photo and
-    blocking a second tap (2 failures).
-* **Not yet verified — nothing runtime.** Migration `0005` has **not** been applied to the live
-    project yet, so no insert has ever been attempted. No screen has been seen on a device: the
-    form layout, the fourth bottom-nav tab, the compression actually landing under 200 KB, and the
-    duplicate-day message are all untested outside the compiler.
-* **Known limitation carried over:** if the row insert fails after the photo upload succeeds, the
-    orphaned object stays in the bucket. `CreateTaskViewModel` has always behaved this way; it is
-    recorded here rather than quietly inherited.
+### [2026-08-29] - Ticking "Simpan Sebagai Template" Is Now One Tap
+* **The complaint:** "saya selalu lupa centang simpan sebagai template". It was not carelessness -
+    the control was built in a way that made it easy to miss and tiring to use even when
+    remembered. Four measurable things:
+    1. It was **item 10 of 14** on a form that scrolls about three screens, and the **only section
+       without a `SectionLabel`** - a bare `Row` with no card or divider, sitting directly under
+       the far more prominent submit button.
+    2. **Ticking it was not enough; the name had to be typed.** `templateName` started `""` with no
+       default and no suggestion, although `judul` was already filled in just above it.
+    3. **A blank name rejected the entire save.** The error even offered *"atau hapus centang"* as
+       the way out - the feature framed as something to abandon so the real work could proceed.
+       (It also quoted `"Simpan sebagai template"` while the label read `"Simpan juga sebagai
+       template"`.)
+    4. **No second chance from that screen:** `isSuccess` triggers `onBack()` in the same frame.
+* **The name now fills itself in, two ways, because each covers the other's gap.** Ticking the box
+    copies `judul` into the field so the text is actually *visible* - for a low-literacy reader what
+    is on screen has to be what gets saved - and `effectiveTemplateName` derives
+    `templateName.ifBlank { judul }` at save time, which covers ticking the box before typing a
+    judul, or deliberately clearing the field.
+* **The submit-blocking validation is gone.** With a name that can never be blank the rule had no
+    reason to exist. The field is now labelled "Nama Template (opsional)", matching the form's other
+    optional sections.
+* **The checkbox became a card with a `SectionLabel`.** Its position was already right - last thing
+    before the submit button - so **what changed is its visual weight, not where it sits**. It was
+    the only part of the form that looked like a footnote instead of a feature.
+* **It stops offering to duplicate a template you already have.** The form now loads the volunteer's
+    template titles on open, following `loadAidSuggestions` exactly (fired from `init`, failure
+    swallowed - a convenience must never block a form that can still be filled in). When one matches
+    the judul, the card is **replaced** by "Sudah ada template untuk judul ini." rather than
+    silently vanishing; UI that disappears without explanation is worse than UI that explains
+    itself. No new query or policy: `TaskRepository.templates()` and its RLS already existed.
+* **The second entry point had the identical flaw.** "Jadikan Template" on `ProgramListScreen`
+    opened a dialog whose name field started empty even though the dialog was holding the whole
+    `Task`. It now prefills from `task.judul`, and its Simpan button is no longer born disabled.
+* **Two dead ends closed on the way:**
+    * `dismissTemplateWarning()` had no caller anywhere. Removed.
+    * `TemplateListScreen`'s empty state is the **only text in the app that explains how a template
+      is made**, and it offered no button - read the sentence, back out, go find the form. It now
+      passes an `action`, the way `ProgramListScreen`'s empty state already did.
+* **Tests:** 128 total, up from 121 (7 new in `CreateTaskTemplateFieldTest`). **Both rules were
+    verified by reverting the code and confirming the failure:** dropping the `ifBlank` fallback
+    broke 3 tests, and dropping the non-blank-judul guard broke 1.
+* **Verified:** clean `assembleDebug` + `testDebugUnitTest` with **zero compiler warnings**.
+* **Not yet verified - none of this has been seen running.** The emulator's session ended when the
+    app was reinstalled during the previous change and no credentials are available from this
+    machine, so every item below is compile-and-test verified only:
+    * That the card actually reads as a distinct block on a real screen.
+    * Ticking once and saving **without typing anything**, and the template appearing in the list.
+    * Ticking, clearing the name, and the save still succeeding under the judul.
+    * The "Sudah ada template untuk judul ini." replacement appearing for a duplicate judul.
+    * The prefilled "Jadikan Template" dialog.
+* **Deliberately not built:** a post-save prompt ("you just made this - keep it as a template?").
+    The checkbox was kept by choice. Worth knowing if it is ever revisited: this app has **no
+    post-action prompt pattern at all** - zero `Snackbar` anywhere, and all three existing
+    `AlertDialog`s are pre-action gates - so it would be a genuinely new interaction here.
+* **Also left alone:** the home card is still titled "Pakai Template", framing templates purely as
+    something to consume. Nothing on the home screen hints they can be created.
+
+### [2026-08-29] - "Anak Binaan Saya" Became a Real Section
+* **What it was:** a heading and a row of bare white pills, each holding a `ChildCare` icon and a
+    name. Four things were wrong at once, confirmed against a screenshot from the running emulator
+    rather than guessed at: it used a different visual vocabulary from every card above it
+    (`Modifier.background(Color.White, CircleShape)`, no elevation, no ripple, 16dp icon - against
+    white cards with 16dp radius, 2dp elevation and 48dp tiles); it carried **only a name**, which a
+    volunteer already knows; it was not tappable although everything above it was; and being the
+    last item in a scrolling column it left the page ending in a large empty area.
+* **The `id` was thrown away at the call site.** `ChildChips(names = ui.children.map { it.nama })`
+    handed the composable a `List<String>`, so it *structurally* could not show anything else or
+    navigate anywhere. That is why this is a rewrite rather than a restyle.
+* **One card per child**, built on the exact `ActionCard` values so the page reads as one design:
+    48dp initial-letter avatar (a **circle**, not the 14dp tile - it stands for a person, not a
+    category), name, "6 tahun - Ibu Siti", a `StatusChip` with the running-programme count, and the
+    condition note clamped to two lines.
+* **A child with no running programme gets the orange chip**, not the teal one. That is the single
+    most actionable thing on the screen and the old design could not express it at all.
+* **The per-child count is derived from `activePrograms`, never `programs`.** The hero card
+    directly above prints `activeCount`; counting raw rows would let the cards sum to more than the
+    total printed inches above them. There is a test asserting the two agree.
+* **First age display in the app.** `tanggal_lahir` has existed since `0001` but was **write-only**
+    - it appeared in two admin form fields and nowhere else. `catatan_kondisi` had likewise never
+    been rendered read-only. Under one year the label counts **months**, because "0 tahun" says
+    nothing about a baby and this app serves toddlers.
+* **Three queries now, and the screen is faster than when it did two.** `refresh()` ran its two
+    calls sequentially; parent names would have made three. All three are now `async` inside one
+    `coroutineScope`, so the added data costs no wall-clock time on the slow connections this app
+    targets. The comment says so, so nobody "simplifies" it back.
+* **No new RLS.** `can_view_profile` (`0001_initial_schema.sql:195-215`) already admits "I am a
+    volunteer; target is the parent of a child assigned to me", so `profilesByRole("orangtua")`
+    returns exactly the right parents and nothing more.
+* **A new projection instead of widening `ChildOption`.** `AssignedChild` carries the extra columns;
+    `ChildOption` still feeds the create-program dropdown and the parent's home untouched. The extra
+    columns ride on the request that was already being made, so no round trip was added.
+* **Fixed in passing:** `childrenForCurrentVolunteer()` has no `order()` and never had one, so the
+    chip order could differ between loads. The new query sorts by name.
+* **Tapping a card opens the create form with that child chosen.** The route gained a second
+    optional argument (`create_program_ajar?templateId={templateId}&anakId={anakId}`); both plain
+    `navigate("create_program_ajar")` callers still match unchanged. Order-independent by
+    construction - `loadChildren` uses `selectedAnakId ?: list.first()`, so an explicit choice is
+    never overwritten by the default whichever finishes first.
+* **Tests:** 121 total, up from 111 (10 new in `AssignedChildTest`). **Both new rules were verified
+    by reverting the code and confirming the failure:** counting raw `programs` broke the
+    agrees-with-the-total test, and naive year subtraction broke both the birthday-not-yet-reached
+    and the months cases. `VolunteerHomeStateTest` was migrated from `ChildOption` to
+    `AssignedChild`.
+* **Follow-up fix, found by a reader of the screenshot and not by me.** The condition note was a
+    sibling of the avatar `Row`, so it started at the card's left padding **underneath the avatar**
+    instead of lining up with the name -- with the live data (`catatan_kondisi` is literally "1")
+    it read as a stray character nobody could explain. Two changes: `padding(start = 60.dp)` to
+    align it with the name (48dp avatar + the Row's 12dp gap), and a `"Kondisi: "` prefix. Unlike
+    "5 program" or "6 tahun", a free-text note describes nothing about itself, so it needs the
+    label to be legible at all.
+* **Verified, on the emulator, with screenshots before and after:** clean `assembleDebug` +
+    `testDebugUnitTest` with **zero compiler warnings**; the greeting is not clipped at scroll 0;
+    real data displayed ("0 bulan - Kevin ortu", "5 program", and the condition note); and
+    **tapping the card opened the create form with "Kevin 2" already selected**. The feedback
+    triage tabs from the previous change were also seen working ("Perlu Ditanggapi (0)" /
+    "Kabar Baik (2)").
+* **Not yet verified - the condition-note fix above has NOT been seen on screen.** Reinstalling
+    ended the emulator's session and no credentials are available from this machine, so the
+    alignment and the "Kondisi: " label are compile-and-test verified only. The screenshot that
+    proved the rest of the card predates this fix.
+* **Not yet verified - the signed-in account only has one child, with programmes, a birth date and
+    a parent, so every fallback path is untested on screen:**
+    * The **orange "Belum ada program"** chip.
+    * A child with **no birth date** or **no resolvable parent** - i.e. the subtitle collapsing to
+      one half or to nothing. Covered by unit tests, not by eyes.
+    * A child with a **blank name**, i.e. the avatar falling back to the `ChildCare` icon.
+    * **More than one child**, so the stacked-card rhythm and the new name sort are unseen.
+    * A **long condition note**, so the two-line clamp and its ellipsis are unseen.
+* **Unrelated debt confirmed, not fixed:** the screenshot of `CreateTaskScreen` came out in
+    lavender and purple-grey, not brand teal. That is the `dynamicColor = true` issue already
+    recorded in this document - but it was written up as affecting **admin** screens, and this
+    confirms it hits **volunteer** screens too wherever `MaterialTheme.colorScheme` is used instead
+    of the `ui.theme` constants. Still a one-line change that alters every screen, so it still
+    needs a deliberate decision rather than being slipped into an unrelated change.
+
+### [2026-08-29] - Reusable Program Ajar Templates
+* **The problem:** a volunteer repeating a latihan - same exercise, different child, or the same
+    child weeks later - refilled the entire form and **re-uploaded the demo media**. That last part
+    is the expensive one: `submit()` does a raw `openInputStream(...).readBytes()` and uploads it
+    verbatim, so a 50 MB video is paid for again over a slow connection every single time.
+* **A template stores the exercise, never the delivery.** No `anak_id`, no `deadline`, no
+    `starts_on`/`ends_on`, no `status`. See the Product Rules table above for the full split; the
+    rule lives in two pure functions with a test on each rather than scattered through a ViewModel.
+* **Applying a template prefills the form that already exists.** No second create screen - the
+    route just gained an optional argument (`create_program_ajar?templateId={templateId}`), so both
+    existing `navigate("create_program_ajar")` callers still open an empty form unchanged. Every
+    prefilled field stays editable, which was the explicit requirement.
+* **Templates are shared foundation-wide** (`template_select` admits any relawan), and **that is
+    the opposite of how aid suggestions work** - those are deliberately private, per the
+    2026-08-16 entry. The difference is deliberate: an aid suggestion is inferred from a
+    volunteer's own history, whereas a template is something they chose to publish. The privacy
+    consequence is real and is stated in the UI at both save points: the demo media travels too.
+* **The shared choice forced a new storage bucket.** See "Why template media needs its own bucket"
+    above - keeping template media in `tugas-demo` breaks for exactly the cross-volunteer case
+    sharing exists for, *and* leaves the receiving parent unable to open the demo at all. Verified
+    that `copy(from, to, destinationBucket)` exists in supabase-kt 3.5.0 by reading the dependency
+    source (`BucketApi.kt:169`) rather than assuming.
+* **`template_delete` is the first DELETE policy in this schema.** Every other table has none on
+    purpose, because they record care that was delivered. A template records nothing that happened,
+    so removing one loses no history. The migration says so, in case it later reads as an oversight.
+* **A failed template must not fail the program.** By the time the template is written the `tugas`
+    row exists and `on_tugas_insert` has already notified the parent, so `saveTemplate` never
+    throws - it returns a warning that replaces the success toast. Reporting it as "Gagal menyimpan
+    program ajar" would have invited the volunteer to submit again and hand the family a duplicate.
+* **Removed a duplicate rather than adding one.** `ActionErrorBanner` was private inside
+    `ProgramListScreen`; the template list needed the same thing, so it moved to
+    `ui/components/ActionErrorBanner.kt` - the same move `EmptyState` got for the same reason. Its
+    doc now records why it exists separately from `ErrorRetry`: mixing the two is a bug this repo
+    has already shipped once.
+* **Also fixed while in there:** `CreateTaskScreen`'s instruction box seeds its `TextFieldValue`
+    once and owns the cursor, so a template's `instruksi` reached the ViewModel but left the box on
+    screen empty. It is now synced explicitly.
+* **Tests:** 111 total, up from 99 (12 new in `TaskTemplateTest`). **Both directions were verified
+    by reverting the code and confirming the failure:** leaking `anakId` into the template broke 2
+    tests, and dropping the recurrence-clearing rule broke 1 - so they catch the regression rather
+    than passing either way.
+* **Verified:** clean `assembleDebug` + `testDebugUnitTest`, **zero compiler warnings**.
+* **Not yet verified - nothing was run on a device or against the database:**
+    * **Migration `0006` has NOT been run.** Neither has `0005`.
+    * **The whole storage-copy design is untested at runtime.** The argument for it is read off the
+      RLS policies and the supabase-kt source, which is not the same as having seen a copy succeed.
+      The decisive test needs **two volunteer accounts assigned to different children**: volunteer B
+      applies volunteer A's template, saves, and then **the parent of B's child opens the task and
+      the video plays**. If the second copy is wrong, that last step is where it shows.
+    * Whether `storage.objects` INSERT policy is enough for a `copy` destination, or whether the
+      API also needs something the schema does not grant.
+    * Every pixel: the template list, the save-as-template checkbox, the naming dialog, and the
+      media picker showing inherited media.
+    * Deleting a template leaves its object in the bucket - there is no DELETE policy on
+      `storage.objects` anywhere, so this is consistent with existing behaviour, not new.
+
+### [2026-08-29] - Closing a Positive Behavior Note Without Writing an Essay
+* **The question that started it:** if a parent's catatan perilaku is positive and there is nothing
+    to ask, should the volunteer reply, or leave it? Reading the schema settled it: **leaving it is
+    not a neutral choice.** A note is closed only by a volunteer's reply, so a positive one sits
+    under an orange "Menunggu" chip on the parent's home screen forever, and never leaves the
+    volunteer's inbox. For a low-literacy parent whose participation runs on trust, being visibly
+    ignored after reporting good news discourages the exact habit this app exists to build.
+* **Quick replies, not a new status.** Three canned sentences (`ui/feedback/QuickReplies.kt`) sit
+    above the composer for volunteers. Each sends a **real** reply, so the existing
+    `on_balasan_insert` trigger flips the note to "Dijawab" and notifies the parent. **No migration,
+    no RLS change, no new trigger, no acknowledge path to maintain** - and the parent gets a
+    sentence to read rather than a chip quietly changing colour. Shown only when
+    `!isParent && status != "answered"`: a parent's reply advances nothing, and an answered note has
+    nothing left to close.
+* **`sendReply(text: String? = null)`** - a chip passes its sentence straight in rather than filling
+    the text field first, so a tap cannot be lost to a recomposition landing between two state
+    updates. A chip reply deliberately does **not** clear a half-typed message. Also added an
+    `isSending` re-entry guard the typed path never had.
+* **The volunteer inbox is now two tabs**, "Perlu Ditanggapi" and "Kabar Baik", via
+    `enableTriage = true` (default `false`, so the parent's screen is untouched - a parent sees only
+    their own child and has nothing to triage). Pure client-side filter over the list already
+    fetched: **no new column and no second query**, which this data-frugal app should not pay for.
+* **The obvious triage rule is wrong, and the tests say so.** `kendala` is almost never empty - two
+    of its five chips (`Lancar`, `Banyak Kemajuan`) report *success*. Treating a non-empty `kendala`
+    as trouble would have put nearly every note in the urgent tab and defeated the split.
+    `FeedbackChallenge.CONCERNING` names the three that actually are difficulties. Matching splits
+    the joined string rather than substring-searching it, so a future chip that embeds one of these
+    names cannot fire it by accident.
+* **Migration `0005` declares `feedback.mood`, which no migration ever did.** The column has been
+    written on every parent feedback insert since `e7cd324` and is a required form field, but it
+    only exists in production because someone added it through the Supabase dashboard - so `0001`
+    stopped describing production some time ago. A database rebuilt from these migrations alone
+    would reject every catatan perilaku with PGRST204. `text`, not an enum, for the same reason
+    `tugas.alat_bantu` is `text[]`. `add column if not exists` makes it safe to run on the live
+    project.
+* **Removed a duplicate rather than adding a layer.** `getMoodEmoji` was copied **verbatim** into
+    two screens and the mood strings were hardcoded in three places, with the challenge chips in a
+    fourth. All four now read `FeedbackMood` / `FeedbackChallenge` in
+    `data/model/FeedbackVocabulary.kt`, following the `TeachingAid` pattern.
+* **Also removed the dead `"in_process"` chip** from `FeedbackListScreen`. Nothing has ever written
+    that status, so the blue "Diproses" badge could never render and implied a workflow that does
+    not exist. The enum value stays in Postgres - dropping it costs a migration and buys nothing.
+* **Tests:** 99 total, up from 90 (9 new in `FeedbackTriageTest`). **Both triage rules were verified
+    by reverting the code and confirming the failure:** adding `Lancar` to `CONCERNING` broke 2
+    tests, and removing the answered-note guard broke 2 - so they genuinely catch the regression
+    rather than passing either way. The suite also pins the stored chip/mood strings and the emoji
+    mapping, so a rename that would orphan existing rows breaks the build instead of the data.
+* **Verified:** clean `assembleDebug` + `testDebugUnitTest` green with **zero compiler warnings**
+    (the first pass used the deprecated `TabRow`; switched to `PrimaryTabRow`).
+* **Not yet verified - nothing was run on a device or against the database:**
+    * **Migration `0005` has NOT been run,** and it was not confirmed whether `mood` actually exists
+      in production. If it does, `0005` is only a bookkeeping catch-up. If it does not, then every
+      catatan perilaku has been failing to save all along and this is a live bug fix. **Check this
+      before merging** - it decides which of those two stories is true.
+    * The quick-reply round trip: that a chip tap really does insert the reply, that the trigger
+      flips `status`/`answered_at`, and that the parent's chip turns green. Needs a parent **and** a
+      volunteer account; none has ever been available from this machine.
+    * Every pixel. The tab row, the chip row above the composer, and how the chips wrap on a narrow
+      phone are all untested on a screen.
+    * **The parent will not see the notification** the reply generates. `ParentNotificationScreen`
+      still renders a hardcoded `sampleNotifications` list and never reads the `notifications`
+      table. The row is written; it is just not displayed yet. The status change on the home screen
+      *is* visible now.
 
 ### [2026-08-16] - Volunteer Screens: A Real Home, and Six Flow Fixes
 * **The volunteer had no home screen.** It was an unstyled `Box` of four buttons written inline in

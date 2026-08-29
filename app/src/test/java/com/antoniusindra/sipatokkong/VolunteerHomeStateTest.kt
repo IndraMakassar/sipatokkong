@@ -1,6 +1,6 @@
 package com.antoniusindra.sipatokkong
 
-import com.antoniusindra.sipatokkong.data.model.ChildOption
+import com.antoniusindra.sipatokkong.data.model.AssignedChild
 import com.antoniusindra.sipatokkong.data.model.Task
 import com.antoniusindra.sipatokkong.ui.volunteer.VolunteerHomeUiState
 import org.junit.Assert.assertEquals
@@ -41,7 +41,7 @@ class VolunteerHomeStateTest {
         deadline = deadline,
     )
 
-    private fun state(programs: List<Task> = emptyList(), children: List<ChildOption> = emptyList()) =
+    private fun state(programs: List<Task> = emptyList(), children: List<AssignedChild> = emptyList()) =
         VolunteerHomeUiState(programs = programs, children = children, today = today, isLoading = false)
 
     // ---- activeCount ----
@@ -92,7 +92,7 @@ class VolunteerHomeStateTest {
 
     @Test
     fun `childCount reflects the assigned children`() {
-        val children = listOf(ChildOption("1", "Andi"), ChildOption("2", "Siti"))
+        val children = listOf(AssignedChild("1", "Andi"), AssignedChild("2", "Siti"))
         assertEquals(2, state(children = children).childCount)
     }
 
@@ -121,7 +121,7 @@ class VolunteerHomeStateTest {
     fun `a volunteer with children but no running program is told so`() {
         assertEquals(
             "Belum ada program ajar yang berjalan.",
-            state(children = listOf(ChildOption("1", "Andi"))).summary,
+            state(children = listOf(AssignedChild("1", "Andi"))).summary,
         )
     }
 
@@ -131,7 +131,7 @@ class VolunteerHomeStateTest {
             "2 program ajar sedang berjalan.",
             state(
                 programs = listOf(task("a"), task("b")),
-                children = listOf(ChildOption("1", "Andi")),
+                children = listOf(AssignedChild("1", "Andi")),
             ).summary,
         )
     }

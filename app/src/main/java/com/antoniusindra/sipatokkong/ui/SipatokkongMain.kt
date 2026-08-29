@@ -17,9 +17,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
 import com.antoniusindra.sipatokkong.data.model.UserRole
@@ -43,6 +45,7 @@ import com.antoniusindra.sipatokkong.ui.task.TaskDetailScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.CreatePresensiScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.CreateTaskScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.ProgramListScreen
+import com.antoniusindra.sipatokkong.ui.volunteer.TemplateListScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.VolunteerHomeScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.VolunteerHomeViewModel
 import kotlinx.coroutines.launch
@@ -283,7 +286,10 @@ fun SipatokkongMain() {
                             ui = volunteerState,
                             onCreateProgram = { navController.navigate("create_program_ajar") },
                             onOpenPrograms = { navController.navigate("volunteer_programs") },
-                            onCatatKunjungan = { navController.navigate("create_presensi") },
+                            onOpenTemplates = { navController.navigate("volunteer_templates") },
+                            onOpenChild = { id ->
+                                navController.navigate("create_program_ajar?anakId=$id")
+                            },
                             onOpenFeedbackThread = { id -> navController.navigate("feedback_thread/$id") },
                             onRetry = { volunteerVm.refresh() },
                             onLogout = {
@@ -300,8 +306,37 @@ fun SipatokkongMain() {
                         onCreateProgram = { navController.navigate("create_program_ajar") },
                     )
                 }
-                composable("create_program_ajar") {
-                    CreateTaskScreen(onBack = { navController.popBackStack() })
+                composable("volunteer_templates") {
+                    TemplateListScreen(
+                        onBack = { navController.popBackStack() },
+                        onUseTemplate = { id ->
+                            navController.navigate("create_program_ajar?templateId=$id")
+                        },
+                        onCreateProgram = { navController.navigate("create_program_ajar") },
+                    )
+                }
+                // Both arguments optional, so the plain navigate("create_program_ajar") callers
+                // still match this route unchanged and open an empty form.
+                composable(
+                    route = "create_program_ajar?templateId={templateId}&anakId={anakId}",
+                    arguments = listOf(
+                        navArgument("templateId") {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = null
+                        },
+                        navArgument("anakId") {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = null
+                        },
+                    ),
+                ) { backStackEntry ->
+                    CreateTaskScreen(
+                        onBack = { navController.popBackStack() },
+                        templateId = backStackEntry.arguments?.getString("templateId"),
+                        anakId = backStackEntry.arguments?.getString("anakId"),
+                    )
                 }
                 composable("rekap_absensi") {
                     RekapAbsensiScreen(onBack = { navController.popBackStack() })

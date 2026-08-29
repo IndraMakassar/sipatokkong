@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,6 +20,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,6 +38,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -42,12 +47,23 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.antoniusindra.sipatokkong.core.util.formatIsoDate
 import com.antoniusindra.sipatokkong.data.model.Feedback
+import com.antoniusindra.sipatokkong.data.model.FeedbackMood
 import com.antoniusindra.sipatokkong.data.model.FeedbackReply
+import com.antoniusindra.sipatokkong.ui.theme.AppBackground
 import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
+import com.antoniusindra.sipatokkong.ui.theme.IconBoxBg
 import com.antoniusindra.sipatokkong.ui.theme.MineBubble
 import com.antoniusindra.sipatokkong.ui.theme.MutedText
 import com.antoniusindra.sipatokkong.ui.theme.OtherBubble
+import com.antoniusindra.sipatokkong.ui.theme.StatusGreenBg
+import com.antoniusindra.sipatokkong.ui.theme.StatusGreenText
+import com.antoniusindra.sipatokkong.ui.theme.StatusOrangeBg
+import com.antoniusindra.sipatokkong.ui.theme.StatusOrangeText
+import com.antoniusindra.sipatokkong.ui.theme.StatusTealBg
+import com.antoniusindra.sipatokkong.ui.theme.StatusTealText
+import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,10 +73,11 @@ fun FeedbackThreadScreen(
     viewModel: FeedbackThreadViewModel = viewModel(factory = FeedbackThreadViewModel.Factory),
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
+    val today = remember { LocalDate.now() }
     LaunchedEffect(feedbackId) { viewModel.load(feedbackId) }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = AppBackground,
         topBar = {
             TopAppBar(
                 title = { Text("Detail Feedback", fontWeight = FontWeight.Bold) },
@@ -70,7 +87,7 @@ fun FeedbackThreadScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
+                    containerColor = AppBackground,
                     titleContentColor = BrandTeal,
                     navigationIconContentColor = BrandTeal,
                 )
@@ -78,12 +95,22 @@ fun FeedbackThreadScreen(
         },
         bottomBar = {
             if (ui.feedback != null) {
-                ReplyBar(
-                    value = ui.replyText,
-                    isSending = ui.isSending,
-                    onChange = viewModel::onReplyChange,
-                    onSend = viewModel::sendReply,
-                )
+                Column {
+                    // Volunteers only, and only while the note is still open: a parent's reply
+                    // changes no status, and once answered the volunteer has nothing left to close.
+                    if (!ui.isParent && ui.feedback!!.status != FEEDBACK_STATUS_ANSWERED) {
+                        QuickReplyBar(
+                            isSending = ui.isSending,
+                            onPick = { viewModel.sendReply(it) },
+                        )
+                    }
+                    ReplyBar(
+                        value = ui.replyText,
+                        isSending = ui.isSending,
+                        onChange = viewModel::onReplyChange,
+                        onSend = { viewModel.sendReply() },
+                    )
+                }
             }
         }
     ) { innerPadding ->
@@ -104,7 +131,7 @@ fun FeedbackThreadScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                FeedbackDetailCard(ui.feedback!!)
+                FeedbackDetailCard(ui.feedback!!, today)
 
                 if (ui.replies.isEmpty()) {
                     Text("Belum ada balasan.", color = MutedText, style = MaterialTheme.typography.bodyMedium)
@@ -115,6 +142,7 @@ fun FeedbackThreadScreen(
                             reply = reply,
                             isMine = reply.authorId == ui.myId,
                             isParentViewer = ui.isParent,
+                            today = today,
                         )
                     }
                 }
@@ -129,23 +157,45 @@ fun FeedbackThreadScreen(
 }
 
 @Composable
-private fun FeedbackDetailCard(fb: Feedback) {
+private fun FeedbackDetailCard(fb: Feedback, today: LocalDate) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
+        // Was unset, so this card rendered flat while every other card in the app sits at 2dp.
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Box(
-                    modifier = Modifier.size(48.dp).background(MineBubble, CircleShape),
+                    // IconBoxBg, the tile colour used everywhere else; MineBubble is the chat
+                    // bubble colour and reading it here was a coincidence, not a decision.
+                    modifier = Modifier.size(48.dp).background(IconBoxBg, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(getMoodEmoji(fb.mood), fontSize = 24.sp)
+                    Text(FeedbackMood.emojiOf(fb.mood), fontSize = 24.sp)
                 }
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text("Kondisi Si Kecil", fontWeight = FontWeight.SemiBold, color = MutedText, style = MaterialTheme.typography.bodySmall)
                     Text(fb.mood ?: "Normal", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    // The note's own date was never shown anywhere on this screen.
+                    formatIsoDate(fb.createdAt, today)?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = MutedText)
+                    }
+                }
+                // `status` was in hand here all along and never rendered, so a parent opening a
+                // thread could not tell whether it had been answered without reading the bubbles.
+                val chip = when (FeedbackTriage.stateOf(fb)) {
+                    FeedbackState.DIJAWAB -> Triple("Dijawab", StatusGreenBg, StatusGreenText)
+                    FeedbackState.PERLU_DIBALAS -> Triple("Perlu Dibalas", StatusOrangeBg, StatusOrangeText)
+                    FeedbackState.KABAR_BAIK -> Triple("Kabar Baik", StatusTealBg, StatusTealText)
+                }
+                Box(
+                    modifier = Modifier
+                        .background(chip.second, CircleShape)
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(chip.first, color = chip.third, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -160,14 +210,6 @@ private fun FeedbackDetailCard(fb: Feedback) {
     }
 }
 
-private fun getMoodEmoji(mood: String?): String = when (mood) {
-    "Senang" -> "😊"
-    "Biasa" -> "😐"
-    "Rewel" -> "😢"
-    "Sakit" -> "🤒"
-    else -> "📝"
-}
-
 @Composable
 private fun LabeledText(label: String, value: String) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -177,25 +219,94 @@ private fun LabeledText(label: String, value: String) {
 }
 
 @Composable
-private fun ReplyBubble(reply: FeedbackReply, isMine: Boolean, isParentViewer: Boolean) {
+private fun ReplyBubble(
+    reply: FeedbackReply,
+    isMine: Boolean,
+    isParentViewer: Boolean,
+    today: LocalDate,
+) {
     val author = when {
         isMine -> "Anda"
         isParentViewer -> "Relawan"
         else -> "Orang Tua"
     }
-    Row(modifier = Modifier.fillMaxWidth()) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
+    ) {
         if (isMine) Spacer(Modifier.width(40.dp))
         Card(
-            modifier = Modifier.weight(1f),
+            // `fill = false`: with a plain weight(1f) a one-word reply stretched the full width and
+            // read as a block, not a bubble.
+            modifier = Modifier.weight(1f, fill = false),
             shape = RoundedCornerShape(14.dp),
             colors = CardDefaults.cardColors(containerColor = if (isMine) MineBubble else OtherBubble),
         ) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(author, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = BrandTeal)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        author,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = BrandTeal,
+                        modifier = Modifier.weight(1f),
+                    )
+                    // `createdAt` was fetched from the database and then never rendered, so there
+                    // was no way to tell an hour-old reply from a three-week-old one.
+                    formatIsoDate(reply.createdAt, today)?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = MutedText)
+                    }
+                }
                 Text(reply.isi, style = MaterialTheme.typography.bodyMedium)
             }
         }
         if (!isMine) Spacer(Modifier.width(40.dp))
+    }
+}
+
+/**
+ * One-tap replies, shown to a volunteer above the composer.
+ *
+ * Each chip sends a real reply, so the existing `on_balasan_insert` trigger flips the note to
+ * "Dijawab" and notifies the parent — no separate acknowledge path, no new status value.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun QuickReplyBar(
+    isSending: Boolean,
+    onPick: (String) -> Unit,
+) {
+    Surface(color = Color.White) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                "Balas cepat",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MutedText,
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                // Without this, chips that wrap onto a second line sit flush at 0dp -- a bug this
+                // repo has already shipped once and fixed. See the Change Log in project_status.md.
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                QUICK_REPLIES.forEach { text ->
+                    AssistChip(
+                        onClick = { onPick(text) },
+                        enabled = !isSending,
+                        label = { Text(text) },
+                        colors = AssistChipDefaults.assistChipColors(labelColor = BrandTeal),
+                    )
+                }
+            }
+        }
     }
 }
 

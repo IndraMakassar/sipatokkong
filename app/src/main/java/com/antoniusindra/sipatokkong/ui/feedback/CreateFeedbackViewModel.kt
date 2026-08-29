@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
 import com.antoniusindra.sipatokkong.data.model.ChildOption
+import com.antoniusindra.sipatokkong.data.model.CATATAN_RUTIN
 import com.antoniusindra.sipatokkong.data.model.FeedbackInsert
 import com.antoniusindra.sipatokkong.data.repository.ChildRepository
 import com.antoniusindra.sipatokkong.data.repository.FeedbackRepository
@@ -89,7 +90,7 @@ class CreateFeedbackViewModel(
                         catatanPerilaku = null, // Simplified UI removes this field
                         kendala = kendalaText,
                         mood = s.mood,
-                        isi = s.isi.trim().ifBlank { "Catatan rutin perkembangan anak." },
+                        isi = s.isi.trim().ifBlank { CATATAN_RUTIN },
                     )
                 )
                 _uiState.update { it.copy(isSubmitting = false, isSuccess = true) }
