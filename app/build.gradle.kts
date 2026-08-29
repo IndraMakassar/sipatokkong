@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.google.services)
 }
 
 // Read Supabase secrets from local.properties (never committed / never the service_role key)
@@ -89,6 +90,10 @@ dependencies {
     // Upload queue + local cache
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.datastore.preferences)
+
+    // Push notifications (BOM-aligned)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
 
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))

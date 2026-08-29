@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Themed-icon layer (Android 13+). The system reads only this drawable's ALPHA and tints the
+    result, so the colour here is arbitrary and the shape is everything.
+
+    That is exactly why this is its own file rather than an alias for the foreground, which is what
+    the Android Studio template does: aliasing would feed the foreground's partial alpha into a
+    layer used as a mask, and any soft edge or gradient there comes out as a ghosted silhouette.
+
+    Same geometry as the foreground, one flat opaque colour. The two forms overlap, so their union
+    is a single clean shape with no seam down the join.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M72,77 Q64,60 57,47"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="14"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M35,76 Q42,52 55,33"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="16"
+        android:strokeLineCap="round" />
+</vector>

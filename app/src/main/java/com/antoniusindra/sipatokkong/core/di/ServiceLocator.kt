@@ -2,10 +2,12 @@ package com.antoniusindra.sipatokkong.core.di
 
 import android.content.Context
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
+import com.antoniusindra.sipatokkong.core.push.PushRegistrar
 import com.antoniusindra.sipatokkong.core.supabase.SupabaseModule
 import com.antoniusindra.sipatokkong.data.repository.ChildRepository
 import com.antoniusindra.sipatokkong.data.repository.AuthRepository
 import com.antoniusindra.sipatokkong.data.repository.FeedbackRepository
+import com.antoniusindra.sipatokkong.data.repository.NotificationRepository
 import com.antoniusindra.sipatokkong.data.repository.PresensiRepository
 import com.antoniusindra.sipatokkong.data.repository.ProfileRepository
 import com.antoniusindra.sipatokkong.data.repository.TaskRepository
@@ -38,6 +40,11 @@ object ServiceLocator {
     val feedbackRepository: FeedbackRepository by lazy { FeedbackRepository(supabase) }
 
     val presensiRepository: PresensiRepository by lazy { PresensiRepository(supabase) }
+
+    val notificationRepository: NotificationRepository by lazy { NotificationRepository(supabase) }
+
+    /** Keeps `push_tokens` in step with the signed-in user. See [PushRegistrar] for the two rules. */
+    val pushRegistrar: PushRegistrar by lazy { PushRegistrar(supabase, sessionManager) }
 
     fun init(context: Context) {
         appContext = context.applicationContext

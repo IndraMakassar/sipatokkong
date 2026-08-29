@@ -1,5 +1,6 @@
 package com.antoniusindra.sipatokkong.core.auth
 
+import com.antoniusindra.sipatokkong.core.di.ServiceLocator
 import com.antoniusindra.sipatokkong.data.model.Profile
 import com.antoniusindra.sipatokkong.data.model.UserRole
 import io.github.jan.supabase.SupabaseClient
@@ -84,12 +85,27 @@ class SessionManager(private val client: SupabaseClient) {
             it.printStackTrace()
             State.Error(it.message ?: "Gagal memuat profil")
         }
+
+        // After the assignment, not inside it: PushRegistrar reads this same state to learn who it
+        // is registering for, so calling it while _state is still the previous value would quietly
+        // do nothing. Covers a fresh login, retry(), and a session restored at launch alike.
+        if (_state.value is State.SignedIn) {
+            ServiceLocator.pushRegistrar.registerCurrentDevice()
+        }
     }
 
     val currentRole: UserRole?
         get() = (_state.value as? State.SignedIn)?.profile?.role
 
     suspend fun signOut() {
+        // Must precede auth.signOut(): `unregister_push_token` gates on auth.uid(), which is gone
+        // the instant the session is, so afterwards the delete matches nothing and fails silently —
+        // leaving this user registered on a phone the next person is about to sign in to.
+        //
+        // Best-effort on purpose. Someone with no signal must still be able to sign out, or a
+        // shared phone stays logged in as the previous parent. The token table self-heals anyway:
+        // the next sign-in on this device takes the row over (push_tokens is keyed on the token).
+        runCatching { ServiceLocator.pushRegistrar.unregisterCurrentDevice() }
         client.auth.signOut()
     }
 }

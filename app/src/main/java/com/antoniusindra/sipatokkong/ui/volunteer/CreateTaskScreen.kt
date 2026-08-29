@@ -5,6 +5,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -37,11 +39,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -90,7 +89,9 @@ import com.antoniusindra.sipatokkong.data.model.TaskPriority
 import com.antoniusindra.sipatokkong.data.model.TeachingAid
 import com.antoniusindra.sipatokkong.ui.theme.MutedText
 import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -332,17 +333,20 @@ fun CreateTaskScreen(
                 DeadlineField(
                     deadline = ui.startsOn,
                     label = "Tanggal Mulai",
+                    onPick = viewModel::onStartsOnChange,
                 )
                 SectionLabel("Tanggal Selesai*")
                 DeadlineField(
                     deadline = ui.endsOn,
                     label = "Tanggal Selesai",
+                    onPick = viewModel::onEndsOnChange,
                 )
             } else {
                 // ---- Deadline (hanya untuk tugas sekali jalan) ----
                 SectionLabel("Deadline (opsional)")
                 DeadlineField(
                     deadline = ui.deadline,
+                    onPick = viewModel::onDeadlineChange,
                 )
             }
 
@@ -697,7 +701,7 @@ internal fun ChildDropdown(
  *   signed URL for media inherited from a template.
  */
 @Composable
-private fun MediaPickerBox(
+internal fun MediaPickerBox(
     hasMedia: Boolean,
     previewUrl: String?,
     mediaKind: MediaKind?,
@@ -752,24 +756,81 @@ private fun MediaPickerBox(
     }
 }
 
+/**
+ * A date, picked from a calendar.
+ *
+ * Pass [onPick] to make it editable; leave it out and the field is a plain read-only display, which
+ * is what the presensi form wants — a volunteer records the visit they are making now, so its date
+ * is deliberately not theirs to change.
+ *
+ * **Editable fields are `readOnly`, not `enabled = false`.** Disabling paints the whole control in
+ * the disabled palette — grey text, grey border, grey label — which on a field you are meant to tap
+ * reads as "this is switched off", and that is exactly how it looked. `readOnly` keeps the normal
+ * colours and still refuses typing; the tap is caught through the `interactionSource` instead of a
+ * `clickable` modifier, which is the supported way to do it on a text field. The genuinely locked
+ * variant keeps the grey, because there it is telling the truth.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun DeadlineField(
     deadline: LocalDate?,
     label: String = "Deadline",
+    onPick: ((LocalDate?) -> Unit)? = null,
 ) {
     var showPicker by remember { mutableStateOf(false) }
     val display = deadline?.format(DateTimeFormatter.ofPattern("dd MMM yyyy")) ?: "Pilih tanggal"
+    val interactionSource = remember { MutableInteractionSource() }
+
+    if (onPick != null) {
+        LaunchedEffect(interactionSource) {
+            interactionSource.interactions.collect { interaction ->
+                if (interaction is PressInteraction.Release) showPicker = true
+            }
+        }
+    }
 
     OutlinedTextField(
         value = display,
         onValueChange = {},
         readOnly = true,
-        enabled = false,
+        enabled = onPick != null,
         label = { Text(label) },
-        trailingIcon = { Icon(Icons.Filled.CalendarMonth, contentDescription = null) },
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { showPicker = true },
+        trailingIcon = {
+            // An optional date needs a way back to "not set" — without this, one stray tap on
+            // "Deadline (opsional)" makes it permanent for the life of the form.
+            if (onPick != null && deadline != null) {
+                IconButton(onClick = { onPick(null) }) {
+                    Icon(Icons.Filled.Close, contentDescription = "Hapus tanggal")
+                }
+            } else {
+                Icon(Icons.Filled.CalendarMonth, contentDescription = null)
+            }
+        },
+        interactionSource = interactionSource,
+        modifier = Modifier.fillMaxWidth(),
     )
+
+    if (showPicker && onPick != null) {
+        // Seeded with the current value so re-opening lands on the date already chosen.
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = deadline
+                ?.atStartOfDay(ZoneOffset.UTC)
+                ?.toInstant()
+                ?.toEpochMilli(),
+        )
+        DatePickerDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let {
+                        onPick(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate())
+                    }
+                    showPicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { showPicker = false }) { Text("Batal") } },
+        ) {
+            DatePicker(state = state)
+        }
+    }
 }

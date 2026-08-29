@@ -33,6 +33,7 @@ import com.antoniusindra.sipatokkong.ui.admin.ManageAccountsScreen
 import com.antoniusindra.sipatokkong.ui.admin.ManageChildrenScreen
 import com.antoniusindra.sipatokkong.ui.admin.RekapAbsensiScreen
 import com.antoniusindra.sipatokkong.ui.auth.login.LoginScreen
+import com.antoniusindra.sipatokkong.ui.components.NotificationPermissionEffect
 import com.antoniusindra.sipatokkong.ui.feedback.CreateFeedbackScreen
 import com.antoniusindra.sipatokkong.ui.feedback.FeedbackListScreen
 import com.antoniusindra.sipatokkong.ui.feedback.FeedbackThreadScreen
@@ -40,7 +41,7 @@ import com.antoniusindra.sipatokkong.ui.home.AdminHomeScreen
 import com.antoniusindra.sipatokkong.ui.home.ParentHistoryScreen
 import com.antoniusindra.sipatokkong.ui.home.ParentHomeScreen
 import com.antoniusindra.sipatokkong.ui.home.ParentHomeViewModel
-import com.antoniusindra.sipatokkong.ui.notifications.ParentNotificationScreen
+import com.antoniusindra.sipatokkong.ui.notifications.NotificationScreen
 import com.antoniusindra.sipatokkong.ui.task.TaskDetailScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.CreatePresensiScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.CreateTaskScreen
@@ -52,7 +53,11 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 @Composable
-fun SipatokkongMain() {
+fun SipatokkongMain(
+    /** A route a tapped notification asked for, or null. Defaulted so this stays additive. */
+    pendingRoute: String? = null,
+    onRouteConsumed: () -> Unit = {},
+) {
     val navController = rememberNavController()
     val sessionManager = ServiceLocator.sessionManager
     val sessionState by sessionManager.state.collectAsState()
@@ -78,6 +83,32 @@ fun SipatokkongMain() {
             }
             else -> {}
         }
+    }
+
+    // Declared AFTER the root effect on purpose. That one navigates with popUpTo(0) { inclusive =
+    // true } on every session change, so a push destination applied first would simply be wiped.
+    // Running second means the push route lands on top of the role's home screen — which is also
+    // the back behaviour we want: Back from the thread returns home, not to a blank stack.
+    LaunchedEffect(pendingRoute, sessionState) {
+        val route = pendingRoute ?: return@LaunchedEffect
+        when (sessionState) {
+            is SessionManager.State.SignedIn -> {
+                navController.navigate(route)
+                onRouteConsumed()
+            }
+            // Don't hold it: a push tapped while signed out must not ambush whoever logs in next,
+            // possibly a different user on a shared phone.
+            is SessionManager.State.SignedOut -> onRouteConsumed()
+            // Loading: keep the route. This is what makes a cold start work — the effect re-runs
+            // when the session resolves.
+            else -> {}
+        }
+    }
+
+    // Only once someone is signed in and looking at their own home — never at launch, where a
+    // permission dialog arrives before the user knows what the app is and gets denied by reflex.
+    if (sessionState is SessionManager.State.SignedIn) {
+        NotificationPermissionEffect()
     }
 
     when (val state = sessionState) {
@@ -176,11 +207,15 @@ fun SipatokkongMain() {
                             today = parentState.today,
                             isLoadingTasks = parentState.isLoading,
                             childName = parentState.childName ?: "anak Anda",
+                            unreadNotifications = parentState.unreadNotifications,
                         )
                     }
                 }
                 composable("parent_notifications") {
-                    ParentNotificationScreen(onBack = { navController.popBackStack() })
+                    NotificationScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenFeedbackThread = { id -> navController.navigate("feedback_thread/$id") },
+                    )
                 }
                 composable("parent_history") {
                     val signedInState = sessionState as? SessionManager.State.SignedIn
@@ -290,6 +325,8 @@ fun SipatokkongMain() {
                             onOpenChild = { id ->
                                 navController.navigate("create_program_ajar?anakId=$id")
                             },
+                            onCatatKunjungan = { navController.navigate("create_presensi") },
+                            onOpenNotifications = { navController.navigate("relawan_notifications") },
                             onOpenFeedbackThread = { id -> navController.navigate("feedback_thread/$id") },
                             onRetry = { volunteerVm.refresh() },
                             onLogout = {
@@ -299,6 +336,14 @@ fun SipatokkongMain() {
                             },
                         )
                     }
+                }
+                composable("relawan_notifications") {
+                    NotificationScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenFeedbackThread = { id -> navController.navigate("feedback_thread/$id") },
+                        // Only feedback_baru ever reaches a relawan, so name that and nothing else.
+                        emptyText = "Catatan baru dari orang tua akan muncul di sini.",
+                    )
                 }
                 composable("volunteer_programs") {
                     ProgramListScreen(

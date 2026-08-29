@@ -7,4 +7,8 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- Tint behind the status-bar notification icon. Same value as BrandTeal in Color.kt;
+         duplicated because a notification is drawn by the system, which cannot read Compose. -->
+    <color name="notification_accent">#FF2E6E7E</color>
 </resources>

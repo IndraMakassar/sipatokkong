@@ -13,3 +13,6 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Supabase CLI scratch state (holds linked-project info; never useful in the repo)
+supabase/.temp/

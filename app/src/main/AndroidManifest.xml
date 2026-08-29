@@ -13,6 +13,14 @@
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <!--
+        Showing a push notification in the tray. Runtime-requested from API 33 only; on 27-32 the
+        permission does not exist and notifications post without asking, which is why
+        PushPermission.isRequired guards the request the same way MediaSaver.needsLegacyPermission
+        guards the storage one.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:name=".SipatokkongApp"
         android:allowBackup="true"
@@ -23,10 +31,17 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Sipatokkong">
+        <!--
+            singleTop is load-bearing, not tidiness. A notification tap targets this Activity, and
+            under the default "standard" mode that creates a SECOND instance while the app is
+            already open - rebuilding the whole Compose tree, discarding the nav back stack and
+            re-running the session load. With singleTop the running instance gets onNewIntent.
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.Sipatokkong"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -35,6 +50,31 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Receives every push. Never exported: only the Play Services process binds it. -->
+        <service
+            android:name=".core.push.SipatokkongMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!--
+            Read only for messages carrying a `notification` block, which this app never sends -
+            every push from push-notify is data-only so one code path handles both foreground and
+            background. Kept so a test message from the Firebase console still looks like this app
+            rather than a grey blob.
+        -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_accent" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="sipatokkong_notifikasi" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.antoniusindra.sipatokkong.data.model.Profile
 import com.antoniusindra.sipatokkong.data.model.UserRole
+import com.antoniusindra.sipatokkong.ui.components.NotificationBell
 import com.antoniusindra.sipatokkong.ui.feedback.FeedbackListScreen
 import com.antoniusindra.sipatokkong.ui.home.ProfileScreen
 import com.antoniusindra.sipatokkong.ui.theme.AppBackground
@@ -99,9 +100,16 @@ fun VolunteerHomeScreen(
     onOpenPrograms: () -> Unit,
     onOpenTemplates: () -> Unit,
     onOpenChild: (String) -> Unit,
+    onCatatKunjungan: () -> Unit,
     onOpenFeedbackThread: (String) -> Unit,
     onRetry: () -> Unit,
     onLogout: () -> Unit,
+    /**
+     * Opens the inbox behind the bell. Defaulted, unlike every parameter above it: the `@Preview`
+     * at the bottom of this file passes all ten of those by name, and a required eleventh would
+     * stop this file rendering in the IDE — which is the thing that preview exists to prevent.
+     */
+    onOpenNotifications: () -> Unit = {},
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
 
@@ -119,6 +127,16 @@ fun VolunteerHomeScreen(
                         },
                         fontWeight = FontWeight.Bold,
                     )
+                },
+                actions = {
+                    // Tab 0 only, as on the parent's home. Not on tab 2: that tab *is* the feedback
+                    // list, and a badge counting unread `feedback_baru` rows hovering above the same
+                    // notes rendered below it would show two numbers that legitimately disagree —
+                    // unread is not unanswered. The count is also only refreshed on route entry, so
+                    // on the other tabs it would be a number last read on arrival.
+                    if (selectedTab == 0) {
+                        NotificationBell(ui.unreadNotifications, onOpenNotifications)
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = AppBackground,
@@ -144,6 +162,7 @@ fun VolunteerHomeScreen(
                     onOpenPrograms = onOpenPrograms,
                     onOpenTemplates = onOpenTemplates,
                     onOpenChild = onOpenChild,
+                    onCatatKunjungan = onCatatKunjungan,
                     onRetry = onRetry,
                 )
 
@@ -178,6 +197,7 @@ private fun VolunteerBeranda(
     onOpenPrograms: () -> Unit,
     onOpenTemplates: () -> Unit,
     onOpenChild: (String) -> Unit,
+    onCatatKunjungan: () -> Unit,
     onRetry: () -> Unit,
 ) {
     Column(
@@ -508,11 +528,12 @@ private fun VolunteerHomeScreenPreview() {
                 role = UserRole.RELAWAN,
                 phone = "081234567890",
             ),
-            ui = VolunteerHomeUiState(isLoading = false),
+            ui = VolunteerHomeUiState(isLoading = false, unreadNotifications = 3),
             onCreateProgram = {},
             onOpenPrograms = {},
             onOpenTemplates = {},
             onOpenChild = {},
+            onCatatKunjungan = {},
             onOpenFeedbackThread = {},
             onRetry = {},
             onLogout = {},

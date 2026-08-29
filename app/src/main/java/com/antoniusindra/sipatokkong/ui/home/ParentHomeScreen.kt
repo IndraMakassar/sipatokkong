@@ -60,6 +60,7 @@ import com.antoniusindra.sipatokkong.data.model.Profile
 import com.antoniusindra.sipatokkong.data.model.Task
 import com.antoniusindra.sipatokkong.data.model.TaskOccurrence
 import com.antoniusindra.sipatokkong.data.model.UserRole
+import com.antoniusindra.sipatokkong.ui.components.NotificationBell
 import com.antoniusindra.sipatokkong.ui.components.RichTextDisplay
 import com.antoniusindra.sipatokkong.ui.feedback.FeedbackListScreen
 import com.antoniusindra.sipatokkong.ui.theme.AppBackground
@@ -127,6 +128,7 @@ fun ParentHomeScreen(
     today: LocalDate = LocalDate.now(),
     isLoadingTasks: Boolean = false,
     childName: String = "Almair",
+    unreadNotifications: Int = 0,
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val title = when (selectedTab) {
@@ -148,9 +150,7 @@ fun ParentHomeScreen(
                 },
                 actions = {
                     if (selectedTab == 0) {
-                        IconButton(onClick = onOpenNotifications) {
-                            Icon(Icons.Filled.Notifications, contentDescription = "Notifikasi", tint = MutedText)
-                        }
+                        NotificationBell(unreadNotifications, onOpenNotifications)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

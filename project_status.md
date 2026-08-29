@@ -7,8 +7,11 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 
 ### ✅ Built / Completed
 *   **Infrastructure:** Supabase project setup, database schema, RLS policies, and storage bucket
-    configurations. Migrations `0001` through `0004` are all applied to the live project;
-    `0005` and `0006` are written but **not yet run**.
+    configurations. **Migrations `0001` through `0009` are applied; `0010` is written but NOT yet run**, and as of 2026-08-30 that
+    is a fact the database itself records rather than a claim in this file:
+    `supabase_migrations.schema_migrations` now exists and holds all nine. Query it instead of
+    trusting this paragraph. The old duplicate-`0005` collision is resolved
+    (`0007_presensi_unik_harian`).
 *   **Authentication:** Phone Number + PIN login flow mapped to Supabase Auth. Role-based routing (Admin, Parent, Volunteer).
 *   **Admin Features:**
     *   Create Parent/Volunteer accounts (via `noSessionClient` to preserve admin session).
@@ -19,7 +22,11 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
     *   Home dashboard with task summary and status.
     *   Task detail view.
     *   Feedback/Behavior note list and submission form.
-    *   Basic notification list screen.
+    *   Notification inbox reading the real `notifications` table: unread styling, mark-as-read on
+        tap, "Tandai semua" for the whole inbox, "Muat lebih banyak" past the first 50, a deep link
+        into the feedback thread, and an unread count on the home-screen bell. One flat list, never
+        read/unread tabs — a tapped row must stay exactly where it is. The screen itself is shared
+        with the volunteer — see below.
 *   **Volunteer Features:**
     *   Create Task (Program Ajar) with media upload and rich text instructions.
     *   Reusable program-ajar templates, shared across volunteers: save one from the create form
@@ -28,6 +35,9 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
         note and running-programme count; tapping one opens the create form with that child set.
     *   Recurring programs (daily / weekly / monthly / every-N-days) with an end date, plus a
         "Program Ajar Saya" screen for stopping a running program.
+    *   Notification inbox and a bell badge on Beranda, reading the `feedback_baru` rows
+        `on_feedback_insert` fans out over `anak_relawan`. Same screen as the parent's, differing
+        only in its empty-state line.
 *   **Communication:** Feedback threads for parent-volunteer interaction, with one-tap quick
     replies for the volunteer and a triaged inbox ("Perlu Ditanggapi" / "Sudah Beres").
 
@@ -35,8 +45,16 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 *   **Media Compression:** Wired up for the presensi photo upload only (`core/media/ImageCompressor`).
     The `tugas-demo` and `dokumentasi` uploads still send raw bytes; `LightCompressor` (video) is
     still unused.
-*   **Notifications:** Server-side triggers are defined, but real-time client-side handling and push notifications (FCM) are pending.
-    The `notif_type` value `'presensi'` remains declared but unused — no trigger writes it.
+*   **Notifications:** The read path is done for **both** roles — every row any trigger writes is
+    now reachable in the app, through one shared `NotificationScreen`. Still pending: real-time
+    updates (the table is **not** in the `supabase_realtime` publication, so a subscription would
+    receive nothing). **Push (FCM) is fully deployed but never yet exercised:** the app side is
+    built and installed, the `push-notify` Edge Function is live, the trigger and `push_tokens` are
+    applied, and both Vault secrets are correct — but **no push has been sent or received**, because
+    nothing downstream of sign-in has been tested. Both bells still refresh only on route entry, so
+    a notification arriving while the app is open is not seen until the user navigates.
+    The `notif_type` values `'presensi'`, `'tugas_missed'` and `'tugas_reminder'` remain declared
+    but unused — no trigger writes them, and the UI renders any of them generically.
 
 
 ### ❌ Not Built / Deferred
@@ -146,6 +164,30 @@ The trap: **`isi` is a poor headline on its own.** "Catatan Tambahan" is optiona
 an identical title. `subtitleOf` returns null when the chips were promoted to the headline, so they
 never appear twice on one row.
 
+### What a notification card says
+
+`NotifDisplay.from` maps one row of `public.notifications` to one card, and every rule in it exists
+because the client never writes this table: the rows are frozen snapshots taken by a trigger.
+
+**The kind comes from `type`, the destination from `entity_table`.** They are read independently and
+must stay that way - `on_balasan_insert` stores the *thread* id rather than the reply id precisely so
+the deep link works, and deriving one from the other undoes that. A `type` this build does not
+recognise falls to `LAINNYA` and a plain bell rather than being dropped, which is why
+`Notification.type` is a `String` and not a Kotlin enum: an unknown enum constant throws inside
+`decodeList` and would cost the whole inbox rather than one card.
+
+**The three written kinds split by role.** A parent gets `tugas_baru` and `feedback_balasan`; a
+volunteer gets only `feedback_baru`. Nobody sees all three, which is why the only role-specific thing
+on the shared screen is its empty-state line.
+
+**The second line is dropped when it says nothing.** `on_feedback_insert` freezes `left(isi, 120)`
+into `body`, so it inherits the `CATATAN_RUTIN` problem described directly above - except a
+notification row carries no `mood` or `kendala` to fall back on, so there is nothing to promote in
+its place. `bodyLineOf` therefore returns null for the filler and the card renders title and date
+only. Equality, not `startsWith`: a parent who types that sentence and then adds to it has said
+something. There is no "no body" placeholder at all, because all three triggers source `body` from a
+`not null` column and a blank one cannot occur.
+
 ### What a program-ajar template carries
 
 `tugas_template` (migration `0006`) stores **the exercise** and nothing about the delivery. The
@@ -200,7 +242,503 @@ child so `is_parent_of` admits their parent.
     `tugas_penyelesaian` table instead of from expanded recurrence rules: every row already
     carries its own `occurrence_date`, so no rule expansion and no date window are needed at all.
 
+*   ~~**Duplicate presensi rows are still possible in the live project.**~~ **Withdrawn 2026-08-30 —
+    this was wrong.** `presensi_unik_harian` was already applied to the live project; the claim came
+    from this file, and this file had never been checked against the database. Duplicates have not
+    been possible for some time. Kept rather than deleted, because the mistake is the useful part:
+    every "still broken in production" line here is a memory until someone queries for it.
+
+*   **The notification inbox only grows.** `notifications` has no DELETE policy — by design, since
+    rows are written by `security definer` triggers and nothing should be able to erase its own
+    history — and no pruning of any kind. One row per program and per volunteer reply accumulates
+    forever.
+
+    ~~"There is no paging… the honest fix is a retention policy in the database, not paging in the
+    client."~~ **Superseded 2026-08-30**, and the old recommendation was wrong twice over: a
+    retention cron would delete the only record of what a parent was told, on a table deliberately
+    given no DELETE policy, and it needs a scheduled service-role job that does not exist. Paging
+    cost one query parameter and one button. The screen now loads 50 at a time with "Muat lebih
+    banyak", so nothing is unreachable — but the table itself still never shrinks, which is the part
+    of this limitation that remains true.
+
 ## Change Log
+
+### [2026-08-30] - A Logo, and Notifications That Say Who Is Talking
+* **The launcher icon was still the stock Android Studio green robot**, untouched since the first
+    commit — twelve files, all dated `init`. Replaced with the app's own mark: two rounded forms
+    propping each other up, which is the literal meaning of *sipatokkong* in Bugis/Makassar and also
+    the shape of the volunteer → parent → volunteer loop the README diagrams. The supporting form is
+    drawn **second** so it overlaps the join; z-order is what makes it read as "holding up" rather
+    than "touching", and the legs are unequal because a symmetric tent reads as a roof.
+* **The agreed colours turned out not to be buildable, and the deviation is deliberate.** The plan
+    said teal supporting, orange supported. Measured, **BrandOrange is illegible on any light
+    field** — 1.6:1 on `IconBoxBg`, 2.05:1 on `AppBackground`, 2.1:1 on white — and there is no
+    field on which literal BrandTeal *and* literal BrandOrange both clear 4.5:1. So the tile is
+    `BrandTealDeep` and the supporting form is `IconBoxBg`, a teal-family token already in the
+    palette. No new colour was invented. A dark tile also holds its edge against a light wallpaper,
+    where a near-white icon reads as an empty slot.
+* **A separate `ic_launcher_monochrome.xml`**, rather than the template's alias to the foreground.
+    The system reads that layer's *alpha* as a mask, so aliasing fed the stock drop-shadow
+    gradient's partial alpha into it and produced a ghosted silhouette.
+* **Deleted the ten `ic_launcher*.webp` files and their five folders.** `anydpi` is a density
+    qualifier that outranks every specific bucket, and `minSdk 27` is past the API 26 adaptive icons
+    need — so the XML wins on 100% of supported devices and the webps were unreachable. They were
+    not a fallback and could not have shown the robot.
+* **Left the notification bell alone.** The small icon is hard-masked to a flat silhouette, and this
+    mark's two forms are told apart by colour and overlap — flattened to white at 24dp they fuse
+    into a meaningless wedge, and it would cost the instant "this is a notification" signal a bell
+    carries for exactly this audience.
+* **Migration `0010`: notifications now name people.** `Kak Dewi memberi tugas untuk Andi`,
+    `Sari Wulandari · Andi`. Every name added is **already readable by the recipient** through
+    `can_view_profile` and `anak_select`, so this discloses nothing new — it only stops the app
+    pretending it does not know. The joins are cheap: `on_tugas_insert` already selected from `anak`,
+    and `on_balasan_insert` already read `profiles` for the author's role, so the volunteer's name
+    there was free.
+* **A parent's reply finally notifies the volunteers.** `on_balasan_insert` wrapped everything in
+    `if author_role = 'relawan'`, so a volunteer started a conversation and never learned it was
+    answered. It now fans out over `anak_relawan` and **deliberately leaves `status` alone** — a
+    parent answering does not make the thread answered, and moving it would empty the volunteer's
+    "Perlu Ditanggapi" list, which is the opposite of the point. Reuses `feedback_balasan`, so no
+    enum change. Also added an `if not found` guard: a reply on a deleted thread previously reached
+    the INSERT with a null `recipient_id`, and the not-null constraint rolled back the reply itself.
+* **`tugas.instruksi` is markdown, and slicing it raw would have shipped the markers.**
+    `CreateTaskScreen` gives volunteers a toolbar that writes literal `###`, `**` and `- `, so a
+    parent's tray would have read `### Langkah 1 - Ajak anak **memegang** sendok`. New
+    `notif_snippet()` strips line-leading block markers — the `n` regex flag is load-bearing, it is
+    what makes `^` match at every line start — strips inline emphasis, and collapses newlines,
+    because a notification body is one line and an instruction is not.
+* **The sender name needed no new plumbing at all.** After `0010` the `title` *is* the sender's
+    name, and the existing chain already carries it: trigger → `0009`'s `jsonb_build_object` → the
+    Edge Function's generic `dataPayload` → FCM → `PushPayload` → `NotifDisplay.from` → `Person`. No
+    new column, no new FCM field, no Edge Function redeploy. **The migration alone changes the words
+    on already-installed APKs.**
+* **`MessagingStyle` + a generated letter avatar**, for the two kinds that really are one person
+    writing to another. The colour is deterministic per name rather than one fixed teal: a volunteer
+    with four assigned children gets notes from four parents, and four identical discs must be read
+    letter by letter while four coloured ones are told apart at a glance. `String.hashCode` is
+    specified by the language, so the mapping is stable across devices and testable against exact
+    values. **The colour means nothing** — not role, not priority — and the KDoc says so.
+* **Three traps in the avatar, each with a test.** `firstOrNull()` on `"😀 Sari"` returns half a
+    surrogate pair and draws a tofu box, so it walks code points; `"ß".uppercase()` is two
+    characters, not one; and a name may contain no letter at all. Non-Latin works free — `"عائشة"`
+    gives `"ع"`.
+* **A wrong comment corrected.** `PushNotifier` claimed *"The title still shows on the lock screen;
+    the detail waits for an unlock."* False: on a **secure** lock screen `VISIBILITY_PRIVATE`
+    redacts the entire notification down to the app name. Which is why putting a parent's name in
+    the title costs nothing — and why the real exposure is a lock screen with **no PIN**, where
+    there is no redaction at all and nothing in the API changes that.
+* **Three stale justifications rewritten, not merely stale comments.** `NotifDisplay`'s
+    `FALLBACK_TITLE_FEEDBACK_BARU` was justified as "byte-identical to what the trigger writes,
+    because that trigger writes a constant" — `0010` makes that false, and a wrong *justification*
+    is worse than a wrong comment because the next reader will trust it. Same for `PushPayload`'s
+    KDoc and one test comment. The four fallback constants themselves are unchanged: still sensible
+    generic wording, and now pure defence.
+* **Tests: 263, up from 247** (12 in `AvatarNamingTest`, 4 for `styleFor`). Fixtures standing in for
+    live trigger rows moved to the new format; fixtures exercising the **blank-title fallback** kept
+    the old strings, and their comments now say which is which — twice during this change a
+    search-and-replace hit a fallback assertion, and the suite caught it both times.
+* **Verified:** `:app:testDebugUnitTest` + `:app:assembleDebug` from `--rerun-tasks`, **263 tests,
+    0 failures, zero compiler warnings**. The icon was **installed and photographed on
+    `emulator-5554`** (uninstall-then-install, because the launcher caches icons by package): it
+    renders, both forms are legible at launcher size, and it is visibly not the robot.
+* **Not verified.** The **monochrome layer** — themed icons would not turn on through `adb`, so the
+    separate mask file is written but unseen. Migration `0010` is **not applied**; nothing has run
+    it, so no notification has yet been written with a name in it. And the whole push appearance —
+    `MessagingStyle`, the avatar, `BigTextStyle`, the markdown stripping, and the new
+    parent-replies-to-volunteer path — is untested on a device, because that needs sign-in and no
+    credentials are available from this machine.
+
+### [2026-08-30] - One Inbox, Cleared in One Tap, and Reachable Past Fifty
+* **The question was whether to split the inbox into read/unread tabs. The answer is no**, and the
+    reasons are worth keeping because they are the same reasons this list works the way it does.
+    The steady state is "everything read", so the unread tab would be empty almost always. The
+    50-row cap is applied **server-side, before any split**, so a client-side "read" tab would hold
+    `50 − unread` rows, silently truncated. And read/unread is already drawn three ways per row —
+    tinted background, teal dot, and whether the card is clickable at all — with the bell showing
+    the count before the screen is even opened.
+* **The decisive one: marking read currently never moves anything.** `markRead` is a positional
+    `items.map`; the row flips colour in place. Under tabs the row being tapped would leave the tab
+    being looked at. That is a behaviour regression, not a layout choice, and this repo already made
+    the opposite call once — the parent's home keeps a finished task visible for the rest of the day
+    precisely so cards do not vanish under the reader.
+* **Two real problems were underneath the question, and only one is about volume.** There was no way
+    to clear a pile of unread — a bell reading 12 took twelve taps, and mark-all-read did not exist
+    anywhere in the app. And volunteers genuinely overflow the window: `on_feedback_insert` fans one
+    row out per assigned volunteer per parent note, so a volunteer with ~10 assigned children whose
+    parents each file ~2 notes a week reaches ~80 rows a month and passes 50 in under three weeks.
+    Parents have neither problem — one program ajar is one notification, even for a year-long daily
+    programme.
+* **New `NotifInbox`**, beside `NotifDisplay` and free of Compose and Supabase types: `unreadIds`,
+    `allRead`, `revertToUnread`, `appendPage`, `hasMore`. `NotifDisplay` answers what one row shows;
+    this answers what happens to the list, which is a different question with different failure
+    modes. Everything worth an `if` lives here, because with no coroutines-test in this suite the
+    ViewModel cannot be tested at all.
+* **A failed sweep reverts by captured ids, not by restoring a snapshot.** A `refresh()` or a single
+    `markRead` can land while the bulk write is in flight; reinstating an earlier list would
+    resurrect rows that are gone and undo a mark that already succeeded.
+* **`appendPage` dedupes by id, and that is load-bearing.** `LazyColumn` is keyed by id and **throws**
+    on a duplicate, and offset paging makes a duplicate reachable: a row inserted above the window
+    shifts the server's page boundary so the boundary row comes back twice. Without the dedupe the
+    screen crashes rather than showing the row twice. The copy already held wins, so an optimistic
+    read flag survives a stale page.
+* **Added an `id` tiebreaker to the query.** `created_at` alone is not a total order and Postgres
+    breaks ties arbitrarily, so with pages a tied row can be returned twice or skipped. Rare today —
+    each trigger writes one row per recipient per transaction — but a `tugas_reminder` cron would
+    stamp a whole batch with the same `now()`.
+* **`markAllRead` filters on `is_read = false` rather than not filtering at all.** It is deliberately
+    the call `markRead`'s KDoc warns about, so the KDoc says so: the blast radius *is* the feature,
+    since "semua" must include rows older than the loaded page. The filter earns itself three times
+    over — it writes only rows that change (300 unread-free rows cost 0 tuples, not 300, on a table
+    with no DELETE policy), it is an exact leading-column match for `idx_notif_recipient`, and a
+    filterless PATCH is textually indistinguishable from the accident.
+* **A confirmation dialog, which is unusual for mark-all-read and deliberate here.** There is no undo
+    and nowhere to put one — this app has zero Snackbars and no mark-unread method — rows never move
+    or leave the list so the tint and dot are the *only* record of what is new, and the action
+    reaches rows that are not on screen, which nothing but a sentence can explain. No count is shown
+    anywhere: the client knows only the loaded number while the action does more, so a figure would
+    be a precise lie.
+* **Found while wiring the app bar: it had no `actions` block, and therefore no
+    `actionIconContentColor`.** Without one the new button would inherit from
+    `MaterialTheme.colorScheme` and be painted from the user's wallpaper on Android 12+ — the same
+    `dynamicColor` bug the `containerColor` comment three lines above already documents, unreachable
+    until now only because there was nothing in that slot.
+* **Both new failures use `ActionErrorBanner`, never `ErrorRetry`** — the list stays on screen and
+    correct in both cases. A failed "Muat lebih banyak" leaves `hasMore` true on purpose, because
+    the button itself is the retry.
+* **Tests: 247, up from 231** (16 new in `NotificationInboxTest`). **Verified by reintroducing the
+    defects:** removing the dedupe broke 2, reverting every row instead of the captured ids broke 2,
+    and an off-by-one at the page boundary (`>` instead of `>=`) broke 1.
+* **Verified:** `:app:testDebugUnitTest` and `:app:assembleDebug` from `--rerun-tasks`, **247 tests,
+    0 failures, zero compiler warnings**; installed to `emulator-5554`.
+* **Not verified - none of it has been seen running.** Sign-in is required and no credentials are
+    available from this machine. Unproven: that the button appears and is teal rather than a
+    wallpaper colour, that Batal changes nothing, that a sweep leaves every row in place, that the
+    badge clears on return, that the mark survives a real round trip, that the revert-plus-banner
+    path works offline, and the whole of paging — for which the cheap test is to set
+    `PAGE_SIZE = 5L` temporarily rather than seeding a hundred rows.
+
+### [2026-08-30] - The Date Fields Were a Half-Finished Copy
+* **Every date field on the Buat Program Ajar form was dead.** Tapping "Deadline (opsional)",
+    "Tanggal Mulai" or "Tanggal Selesai" did nothing at all.
+* **The cause: `DeadlineField` was `AdminFormComponents.DateField` with the second half missing.**
+    It set `showPicker = true` and then **never read it** — there was no `DatePickerDialog` anywhere
+    in the composable. It also took no callback, so even a chosen date had no way back to the
+    ViewModel. `CreateTaskViewModel` has had `onDeadlineChange`, `onStartsOnChange` and
+    `onEndsOnChange` the whole time, wired to nothing. The unused
+    `import androidx.compose.material3.DatePickerDialog` at the top of the file was the fingerprint.
+* **The grey was a symptom of the same thing.** The field used `enabled = false`, which paints the
+    whole control in the disabled palette — grey text, grey border, grey label. On something the
+    user is meant to tap that reads as "switched off", which is precisely how it looked and roughly
+    what it was.
+* **Editable dates are now `readOnly`, not disabled**, so they keep normal colours and still refuse
+    typing; the tap is caught through the field's `interactionSource` rather than a `clickable`
+    modifier, which is the supported route on a text field. `onPick` is optional, and its absence is
+    what makes a field read-only — so `CreatePresensiScreen` keeps its deliberately fixed visit date
+    (commit b2981bc, "make the date cannot change") and keeps the grey, where grey is telling the
+    truth.
+* **An optional date can be unset again.** With a date chosen, the trailing calendar icon becomes a
+    clear button. Without it, one stray tap on a field labelled "opsional" made it permanent for the
+    life of the form.
+* **Also removed two duplicate imports** in the same file (`Close`, `CircularProgressIndicator`) —
+    leftovers from merge `a4df279`, harmless but noise.
+* **Verified:** `:app:testDebugUnitTest` and `:app:assembleDebug` green, 231 tests, zero warnings;
+    installed to `emulator-5554`.
+* **Not verified:** nobody has opened the form and tapped the field. The picker cannot be reached
+    without signing in, and no credentials are available from this machine. Unproven: that the
+    dialog opens, that a chosen date appears in the field, that the clear button works, that the
+    presensi date is still locked, and that the field no longer looks disabled.
+
+### [2026-08-30] - What Production Actually Had, and Push Going Live
+* **Three migrations this document called pending had already been applied.** `0005_feedback_mood`,
+    `0006_tugas_template` and `0007_presensi_unik_harian` were all live, put there through the
+    dashboard. Found the hard way: the combined script aborted with `relation "tugas_template"
+    already exists`, which is also why it was wrapped in a transaction -- nothing was left half
+    applied.
+* **The duplicate-presensi bug was already fixed, and this document said otherwise.** The entry of
+    2026-08-29 stated the unique index "has not been applied, so until it is, a double tap on Simpan
+    still writes two rows". `presensi_unik_harian` was in fact already in place. That claim was
+    repeated confidently several times without ever being checked; the only source for it was this
+    file, and this file was wrong.
+* **The root cause was not the prose, it was the absence of anything to check it against.** With no
+    `supabase_migrations.schema_migrations`, the sole record of what production had run was written
+    by hand here -- and it was wrong about all three. Rather than guess again, the state was measured
+    directly (`to_regclass`, `pg_extension`, `pg_trigger`, `information_schema.columns`) and only the
+    genuinely missing objects were applied.
+* **Applied today:** `0008_push_tokens` and `0009_push_on_notification` -- `pg_net`, the
+    `push_tokens` table with its two `security definer` write functions and RLS, and the
+    `trg_notification_push` trigger. Plus `supabase_migrations.schema_migrations`, backfilled with
+    `0001`-`0009`. **That table is the durable fix**: from here the live schema can be queried
+    instead of remembered, and `supabase db push` is safe for the next migration.
+* **The Vault placeholder was caught before it could fail silently.** `01_vault_secrets.sql` was run
+    before its `<SERVICE_ROLE_KEY>` placeholder had been replaced, so `push_hook_auth` held the
+    literal string. Because `pg_net` is fire-and-forget, the trigger would have sent
+    `Bearer <SERVICE_ROLE_KEY>`, the function would have returned 401, and **nothing anywhere would
+    have reported it** -- pushes would simply never arrive. Detected by checking the secret's length
+    and first three characters rather than its value, then corrected and confirmed to decode to
+    `role = service_role`.
+* **Verified on emulator-5554** (Google Play image), after `:app:installDebug`: Firebase initialises,
+    the app starts with no crash, the `sipatokkong_notifikasi` channel is registered at
+    `mImportance=4` (HIGH), and logcat shows `SipatokkongPush: new FCM token` -- so
+    `SipatokkongMessagingService` is wired and receiving from FCM. The token was correctly **not**
+    registered, because nobody is signed in yet; that is `PushRegistrar`'s designed behaviour.
+* **Not verified - no push has been sent or received yet.** Everything downstream of sign-in is
+    untested: token registration into `push_tokens`, the trigger firing, the Edge Function minting
+    its OAuth token and reaching FCM, the tray notification, the tap route, the shared-phone leak
+    test, offline sign-out, pruning, the denied-permission path, and Doze. Testing needs someone to
+    sign in on the emulator; no credentials are available from this machine.
+
+### [2026-08-30] - Push Notifications: Everything Except the Database Half
+* **The app can now be told something happened while it is closed.** The chain is
+    `notifications` INSERT -> `pg_net` trigger -> Edge Function `push-notify` -> FCM HTTP v1 ->
+    `SipatokkongMessagingService` -> tray -> tap -> `feedback_thread/{id}`.
+* **Push is a delivery channel for rows that already exist, not a second notification system.**
+    `public.notifications` stays authoritative: every push is caused by a row insert, carries that
+    row's own `entity_table`/`entity_id`, and routes through the existing `NotifDisplay.targetOf`.
+    `PushPayload` delegates its wording to `NotifDisplay.from` rather than reimplementing it, so the
+    tray and the inbox cannot describe the same row differently - there is a test asserting the
+    if-and-only-if.
+* **`push_tokens` is keyed on `token` alone, not `(user_id, token)`.** An FCM token identifies an app
+    *installation*, not a person. With `token` as the key the next sign-in **steals** the row, so it
+    stops mattering whether the previous user's sign-out ran at all. Keyed on the pair, a failed
+    sign-out leaves both rows live and the previous user's notifications - another family's child's
+    therapy notes - land on the phone the new user is holding. On a foundation's shared phone that is
+    a leak, not an annoyance.
+* **Writes go through two `security definer` functions because the steal cannot be an RLS policy.**
+    PostgREST's merge-duplicates needs the UPDATE policy's `using (...)` to admit the row that
+    already exists, and `user_id = auth.uid()` is false for exactly the row being taken over; the
+    only policy that would work is `using (true)`, which would let anyone reassign any token.
+* **Data-only payloads, never a `notification` block.** With one, the SDK builds the notification
+    itself when the app is backgrounded and `onMessageReceived` is never called - behaviour splits
+    across the SDK's path and ours, which is the largest source of "worked in development" in FCM.
+    One path in both states is also what makes parsing and routing pure and testable.
+    `android.priority = HIGH` on every send is therefore mandatory, not tuning: a normal-priority
+    data message is held by Doze until the next maintenance window.
+* **The prune footgun is defused twice.** FCM returns `INVALID_ARGUMENT` for a malformed *message*
+    as well as a dead token, so one coding bug on our side would return it for **every** token and a
+    naive prune would empty the whole registry in a single request - silently disabling push for
+    everyone with nothing anywhere that looks like an error. Only a field violation naming
+    `message.token` prunes, and no single invocation may remove more than half the tokens.
+* **The Edge Function has two independent auth gates.** The anon key ships inside the APK and every
+    parent holds a valid user JWT, so "requires a JWT" alone would make this an open push relay any
+    user could aim at any other user with arbitrary text. It requires `role == 'service_role'` **and**
+    a matching `x-push-secret` header; the second survives someone later deploying `--no-verify-jwt`.
+* **Deletion is an action, never a reaction.** `SessionManager` maps `RefreshFailure` to `SignedOut`
+    too, so a registrar that unregistered on every `SignedOut` would throw the registration away
+    whenever the network wobbled. `PushRegistrar` only ever registers on `SignedIn`; the delete lives
+    in `signOut()` and must run **before** `auth.signOut()`, because `unregister_push_token` gates on
+    `auth.uid()` and would otherwise match nothing and fail silently.
+* **`MainActivity` gained `launchMode="singleTop"`**, which is load-bearing rather than tidy: under
+    the default mode a notification tap while the app is open builds a second Activity, rebuilding
+    the whole Compose tree and discarding the nav back stack.
+* **The push route effect is declared after the root session effect on purpose.** That one navigates
+    with `popUpTo(0) { inclusive = true }` on every session change and would wipe a destination
+    applied first. Running second lands the push route on top of home, which is also the back
+    behaviour we want.
+* **The duplicate `0005` is resolved.** `0005_presensi_unik_harian.sql` is now
+    `0007_presensi_unik_harian.sql`; the new work is `0008_push_tokens.sql` and
+    `0009_push_on_notification.sql`. Also added `supabase/.temp/` to `.gitignore`, which covered
+    neither that directory nor any `.env`.
+* **Tests: 231, up from 208** (23 new in `PushPayloadTest`). The Android-bound half -
+    `FirebaseMessagingService`, `NotificationManagerCompat`, `PendingIntent`, `SDK_INT`,
+    `onNewIntent` - is not coverable by this suite and the class KDoc says so, the same honest gap
+    `MediaDownloadRulesTest` names for `MediaStore`. The Edge Function has no test harness at all.
+* **Verified:** `:app:testDebugUnitTest` and `:app:assembleDebug` green, **231 tests, 0 failures,
+    zero compiler warnings**. The `google-services` plugin **does** work with AGP 9.0.1, so the
+    manual `FirebaseApp.initializeApp` escape hatch was not needed. The Edge Function is deployed and
+    `ACTIVE` (`verify_jwt: true`), and an unauthenticated POST to it returns **401**, so the deploy
+    and the first auth gate are confirmed working end to end.
+* **Not verified - the database half is not applied, so no push has ever been sent.** Migrations
+    `0005`, `0006`, `0007`, `0008` and `0009` are all still unapplied; the Vault secrets do not exist
+    yet; and `supabase db push` is deliberately **not** run, because `supabase_migrations
+    .schema_migrations` may be empty (0001-0004 look to have been applied through the dashboard) and
+    a push would then try to re-run `0001` and fail partway through `create type public.user_role`.
+    That reconciliation query is the next step and needs the database password.
+    Also unproven: everything on a device - token registration, the tray notification, the tap route,
+    the shared-phone leak test, offline sign-out, pruning, the denied-permission path, and Doze.
+* **Push is best-effort; the inbox remains the source of truth.** On the Xiaomi/Oppo/Vivo hardware
+    these families own, aggressive app-killing is the default and MIUI's Autostart can block FCM
+    outright, and an app in the stopped state receives nothing whatever the payload.
+    `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` was deliberately **not** added - Play-policy restricted,
+    no eligible use case here, and it would not fix the OEM problem anyway.
+
+### [2026-08-29] - The Volunteer Inbox, and One Screen for Both Roles
+* **Rows were being written to volunteers and shown to nobody.** `on_feedback_insert` fans a
+    `feedback_baru` row out over `anak_relawan` on every parent note - one per assigned volunteer -
+    and the volunteer's top bar had no bell, no icon of any kind, and no inbox. Same shape as the
+    parent gap closed in the previous entry: the database had been doing its half all along.
+* **No new data layer, no migration.** `NotificationRepository` deliberately carries no
+    `recipient_id` filter because `notif_select` is that filter, so all three of its functions
+    already returned the right rows for a volunteer. Not one line of it changed.
+* **The parent-named types became role-neutral and the screen is now shared.** `ParentNotifDisplay`
+    -> `NotifDisplay`, `ParentNotifType` -> `NotifType`, `ParentNotification` -> `NotificationItem`,
+    and the screen/ViewModel/UiState likewise; the test file follows to `NotificationDisplayTest`.
+    Role differences are **one parameter** (`emptyText`), following `FeedbackListScreen`'s pattern of
+    parent-biased defaults and per-role behaviour at the call site. Deliberately **no
+    `role: UserRole`** - `targetOf` already warns that display must derive from the row, and a role
+    parameter reinvites exactly that bug.
+* **New `FEEDBACK_BARU` kind**, with its own icon and a green tile. Without it a volunteer's inbox
+    would be 100% generic bells, since `feedback_baru` was the one value mapped to `LAINNYA` - and a
+    test asserted that on purpose, back when only a parent had an inbox. That assertion is rewritten,
+    not deleted. `iconFor` and `fallbackTitleFor` are exhaustive `when`s with no `else`, so adding
+    the constant was a compile error until both branches existed.
+* **The identical-row problem, found before writing any of it.** `on_feedback_insert` freezes
+    `left(isi, 120)` into `body`, and `CreateFeedbackViewModel` backfills an empty note with
+    `CATATAN_RUTIN` - and mood-plus-chips with no typing is the quickest way to use that form, so it
+    is the common one. Rendered literally, a volunteer's inbox repeats one identical sentence down
+    its entire length: the exact defect `FeedbackSummary.headlineOf` fixed on the feedback list two
+    entries ago, reintroduced on a new screen. `NotificationItem.body` is now `String?` and
+    `bodyLineOf` drops the filler, so the card shows title and date alone. Equality, not
+    `startsWith` - a parent who types that sentence and then adds to it has said something.
+* **`FALLBACK_BODY` deleted as unreachable.** All three triggers source `body` from a `not null`
+    column (`tugas.judul`, `feedback.isi`), so no row can arrive without one. It was also the source
+    of a small pre-existing lie: a card with an empty body invited "Ketuk untuk melihat detail."
+    while its ripple was deliberately disabled.
+* **The bell is a shared component now.** Both top bars would have held character-identical blocks,
+    and the line most likely to drift between two copies is the one nobody looks at - the
+    `contentDescription`. `ui/components/NotificationBell.kt` holds it once, which also removed
+    `ParentHomeScreen`'s cross-package import of `NotifDisplay` rather than merely renaming it.
+* **Tab 0 only, on both homes.** Not on the volunteer's tab 2: that tab *is* the feedback list, and
+    a badge counting unread `feedback_baru` rows hovering above the same notes rendered below would
+    show two numbers that legitimately disagree - unread is not unanswered.
+* **`refreshUnread()` is its own launch with its own `runCatching`**, called first from `refresh()`
+    and never folded into the existing `coroutineScope { Triple(...) }`. That block is all-or-nothing
+    - `coroutineScope` propagates a child's failure - so a notifications outage as a fourth `async`
+    would replace the volunteer's entire Beranda with an error message, over a badge. It sets no
+    error on failure at all; the count simply stays where it was.
+* **Overlap accepted, not overlooked.** Volunteers already have a triaged Feedback tab showing these
+    same threads, with better titles than a notification row can produce. The inbox answers a
+    different question - the tab says what is *unanswered*, the inbox says what is *new since I last
+    looked* - and only the inbox has per-row read state. Recorded here because the next reader will
+    otherwise wonder why both exist.
+* **Tests: 208, up from 200** (7 new in `NotificationDisplayTest`, 1 in `VolunteerHomeStateTest`,
+    3 existing ones rewritten). **Verified by reintroducing the defects:** switching `bodyLineOf` to
+    `startsWith` broke 1; comparing before trimming instead of after broke 2; mapping `feedback_baru`
+    back to `LAINNYA` broke 3.
+* **Verified:** `:app:testDebugUnitTest` and `:app:assembleDebug`, both from `--rerun-tasks`,
+    **208 tests, 0 failures, zero compiler warnings**. `Icons.Filled.Feedback` confirmed present in
+    the pinned icon set at first compile.
+* **Not verified - nothing was run on a device or emulator, and no preview was rendered.** The whole
+    manual pass is outstanding, and it needs a volunteer with at least one assigned child plus that
+    child's parent to create the data, since the client cannot insert a notification. Unproven: that
+    the bell shows and then clears, that the green card renders with no gap where the dropped body
+    would be, that the filler-note case actually occurs as predicted end to end, that the deep link
+    lands on the right thread, that two volunteers on one child get independent counts, that the
+    badge survives an offline Beranda while the summary card fails, and that nothing regressed on the
+    parent's side of the now-shared screen.
+
+### [2026-08-29] - The Notification Screen Stopped Making Things Up
+* **The rows existed the whole time; the app just never asked for them.** Three `security definer`
+    triggers have been writing to `public.notifications` since `0001`: `on_tugas_insert` to the
+    child's parent, `on_feedback_insert` to every assigned volunteer, `on_balasan_insert` back to
+    the parent. `ParentNotificationScreen` rendered a hardcoded `sampleNotifications` list of four
+    invented entries and never opened a connection. A parent's real reply notification was written,
+    stored, and shown to nobody.
+* **New: `Notification` model, `NotificationRepository`, `ParentNotifDisplay`, `ParentNotificationViewModel`.**
+    The screen keeps its layout, empty state and unread styling; only its data source changed.
+* **`Notification.type` is a `String`, not a Kotlin enum, and that is load-bearing.**
+    `kotlinx.serialization` throws on an unknown enum constant, and it throws inside `decodeList` -
+    one unrecognised row would take down the whole inbox rather than one card. `notif_type` already
+    declares three values nothing writes; `ParentNotifDisplay.kindOf` maps anything unrecognised to
+    a generic `LAINNYA`. Four tests cover exactly that.
+* **`TUGAS_REMINDER` is gone from the UI.** Nothing writes `tugas_reminder` - no trigger, no cron
+    job - so the enum described a notification that cannot exist, and two of the four fake entries
+    were that kind. The Postgres enum is untouched; only the UI stopped claiming it.
+* **The list query has no `recipient_id` filter, on purpose.** `notif_select` is exactly
+    `recipient_id = auth.uid()` and, unlike `presensi_select`, carries no `is_admin()` override, so
+    a client filter could only narrow a set that is already one user's rows - and a stale id in
+    `SessionManager` would silently return an empty inbox. Same reasoning
+    `PresensiRepository.listForCurrentVolunteer()` already documents.
+* **`notif_update` gates rows, not columns.** A client may legally rewrite `title`, `body` and
+    `type` on its own rows, so `markRead` sends a one-field `NotificationReadUpdate` rather than the
+    decoded row echoed back, and carries a mandatory `eq("id", ...)` - an unfiltered UPDATE also
+    passes RLS and would mark the entire inbox read in one request.
+* **Tapping a feedback notification opens its thread; a task notification does not navigate.**
+    `on_balasan_insert` stores the thread id (`fb.id`), not the reply id, so the deep link is exact.
+    A task row has no honest destination: the route is `tugas_detail/{tugasId}/{occurrenceDate}` and
+    the notification carries no date - a recurring program has dozens of occurrences and none of
+    them is the right answer. The card gets no ripple when it will not act.
+* **Mark-as-read is optimistic and reverts on failure**, with an `ActionErrorBanner` over a list
+    that stays put - not `ErrorRetry`, which would wipe the inbox over one failed PATCH. Marked on
+    tap, never all-on-open: the unread dot is the only way a parent finds the reply they have not
+    read yet.
+* **The bell now carries a count**, from `unreadCountForCurrentUser()` - a `head = true` +
+    `Count.EXACT` query that returns no response body at all. It rides the home screen's existing
+    `LaunchedEffect(Unit)` re-entry refresh, so returning from the inbox updates it with no new
+    wiring. Loaded in its own `runCatching` so a failing count cannot wipe the task list.
+* **Fixed a latent wallpaper bug while here.** The screen used
+    `MaterialTheme.colorScheme.background`, and `dynamicColor` is still `true`, so on Android 12+ it
+    rendered in the user's wallpaper palette instead of `AppBackground` - the identical bug the
+    feedback screens hit in the previous entry. It never showed up in Android Studio because the
+    `@Preview` passes `dynamicColor = false`. That preview now previews the **card**, not the
+    screen, since previewing the screen would build the real ViewModel.
+* **Tests: 200, up from 182** (18 new in `ParentNotificationTest`). **Verified by reintroducing the
+    defects:** making `kindOf` throw on an unknown value broke 3; keying `targetOf` on `type`
+    instead of `entity_table` broke 1; dropping the blank-`entityId` check broke 1. The plan
+    predicted 2 for the middle one - only 1 fired, because the other candidate row has a matching
+    type and table and so maps identically under the defect. Reported as measured, not as planned.
+* **Verified:** `:app:testDebugUnitTest` and `:app:assembleDebug`, both clean from `--rerun-tasks`,
+    **200 tests, 0 failures, zero compiler warnings**, APK produced.
+* **Not verified - nothing was run on a device or emulator.** No credentials are available from this
+    machine, and creating the data needs a *volunteer* account (the client cannot insert a
+    notification; only triggers can) before a *parent* account can look at it. Unproven: that real
+    rows render, that the badge shows and then clears on return, that the deep link lands on the
+    right thread, that the background is grey rather than wallpaper-tinted on Android 12+, that a
+    failed mark-as-read reverts with the list still on screen, and that the empty state appears for
+    a parent with no notifications.
+
+### [2026-08-29] - Merge a4df279 Left master Unable to Compile
+* **Found while trying to build the notification work: `master` did not compile, and had not since
+    PR #18 was merged over PR #17.** Seven errors, none of them in notification code. This was not
+    introduced by the change above - verified by stashing that work entirely and rebuilding, which
+    produced the identical seven errors.
+* **All four were merge artifacts, not design problems.** `TaskRepository` lost
+    `import java.time.LocalDate` and `java.util.UUID`, which `mediaPath` uses. `CreateTaskScreen`
+    ended up importing `ExperimentalLayoutApi` and `FlowRow` twice. `MediaPickerBox` stayed
+    `private` while `CreatePresensiScreen` had started calling it, and the two sides of its
+    signature had diverged - the caller still passed a single `mediaUri` where the definition now
+    takes `hasMedia` + `previewUrl`.
+* **One of them was a live feature regression, not just a compile error.** `onCatatKunjungan` had
+    been dropped from both `VolunteerHomeScreen` and `VolunteerBeranda`, and from the nav call site,
+    so the volunteer's "Catat Kunjungan" button no longer reached the `create_presensi` route -
+    which was still registered and reachable by nothing. Restored the parameter through both
+    signatures and rewired it in `SipatokkongMain`.
+* **Fixed at the user's explicit direction**, after reporting the breakage and its scope, rather
+    than folded in silently: these are four files no part of the notification feature touches.
+* **Verified:** the tree compiles and the full suite passes. **Not verified:** that the restored
+    "Catat Kunjungan" button actually opens the presensi form on a device - it is wired to the same
+    route the screen was always registered under, but nobody has pressed it.
+
+### [2026-08-29] - One Presensi Per Child Per Day, and a Migration Number Used Twice
+* **A double tap on Simpan wrote two visits.** `presensi` shipped in `0001` with no uniqueness
+    at all, so the second insert succeeded silently. That is worse than a cosmetic duplicate:
+    every number on the admin's `RekapAbsensi` is a row count, and `presensi` has SELECT / INSERT /
+    UPDATE policies but **deliberately no DELETE policy**, so nothing in the app can remove the
+    extra row afterwards. The inflated recap is permanent.
+* **Fixed in the database, because that is the only place it can be fixed.** New
+    `0005_presensi_unik_harian.sql` adds a unique index on `(relawan_id, anak_id, tanggal)`,
+    mirroring the constraint `tugas_penyelesaian` already carries on `(tugas_id, occurrence_date)`
+    for the same reason. A client-side check would still lose the race between two taps, and could
+    not protect the rows already in the table.
+* **Nothing is lost by refusing the second insert.** `presensi_update` lets a volunteer correct
+    their own row, so a mis-logged visit is still editable - the constraint only blocks a duplicate,
+    not a correction.
+* **The raw error was unreadable, so it is translated.** A 23505 arrives from Postgrest as a
+    message naming the index; `CreatePresensiViewModel.messageFor` maps it to "Kunjungan untuk anak
+    ini pada tanggal tersebut sudah dicatat." and otherwise falls through to the original text.
+* **Two files are now numbered `0005`:** `0005_feedback_mood.sql` and
+    `0005_presensi_unik_harian.sql`. Both are committed, both are unapplied, and they touch
+    different tables so the order between them does not matter - but a migration runner that keys on
+    the numeric prefix will not be happy about it, and one of the two should be renumbered to `0007`
+    before anyone runs `supabase db push`. Recorded in Known Limitations rather than renamed here,
+    because renaming a committed migration is a decision about the live project, not a tidy-up.
+* **Verified:** the migration SQL, the repository doc comment, and the `messageFor` mapping were
+    read end to end this session and agree with each other - the string the index comment promises
+    is the string the ViewModel actually returns.
+* **Not verified - none of it was run.** The migration has **not been applied** to the live project,
+    so the duplicate is still possible in production today. No build and no test run happened this
+    session; the suite stands at 182 tests from earlier work, and **none of them cover
+    `messageFor`** - the duplicate-message path is currently unproven by anything except reading it.
+    Nothing was tried on a device.
 
 ### [2026-08-29] - The Parent's Feedback View, and a Contradiction I Introduced
 * **The contradiction was mine, from the previous change.** A row could read "Sudah Beres" in its

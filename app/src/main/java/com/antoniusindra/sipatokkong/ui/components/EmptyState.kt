@@ -21,7 +21,7 @@ import com.antoniusindra.sipatokkong.ui.theme.MutedText
 /**
  * The app's empty state: an icon, a headline, and a sentence saying what will appear here.
  *
- * Lifted out of `ParentNotificationScreen`, where this shape was written once and hardcoded to that
+ * Lifted out of `NotificationScreen`, where this shape was written once and hardcoded to that
  * screen's copy. Most other empty states in the app are a bare line of grey text, which tells the
  * user nothing about why the screen is blank or what to do next.
  *
