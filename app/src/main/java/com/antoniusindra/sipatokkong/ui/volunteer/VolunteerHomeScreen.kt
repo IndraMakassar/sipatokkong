@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ChildCare
+import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
@@ -112,7 +113,8 @@ fun VolunteerHomeScreen(
                     Text(
                         when (selectedTab) {
                             0 -> "Sipatokkong"
-                            1 -> "Feedback Orang Tua"
+                            1 -> "Presensi Saya"
+                            2 -> "Feedback Orang Tua"
                             else -> "Profil Saya"
                         },
                         fontWeight = FontWeight.Bold,
@@ -127,8 +129,9 @@ fun VolunteerHomeScreen(
         bottomBar = {
             NavigationBar(containerColor = Color.White) {
                 VolunteerNavItem(selectedTab == 0, Icons.Filled.Home, "Beranda") { selectedTab = 0 }
-                VolunteerNavItem(selectedTab == 1, Icons.AutoMirrored.Filled.Chat, "Feedback") { selectedTab = 1 }
-                VolunteerNavItem(selectedTab == 2, Icons.Filled.Person, "Profil") { selectedTab = 2 }
+                VolunteerNavItem(selectedTab == 1, Icons.Filled.EventAvailable, "Presensi") { selectedTab = 1 }
+                VolunteerNavItem(selectedTab == 2, Icons.AutoMirrored.Filled.Chat, "Feedback") { selectedTab = 2 }
+                VolunteerNavItem(selectedTab == 3, Icons.Filled.Person, "Profil") { selectedTab = 3 }
             }
         },
     ) { innerPadding ->
@@ -144,7 +147,9 @@ fun VolunteerHomeScreen(
                     onRetry = onRetry,
                 )
 
-                1 -> FeedbackListScreen(
+                1 -> PresensiListScreen(onCatatKunjungan = onCatatKunjungan)
+
+                2 -> FeedbackListScreen(
                     title = "Feedback Orang Tua",
                     onOpenThread = onOpenFeedbackThread,
                     // No onCompose: a volunteer replies to threads, they do not start them.
@@ -210,6 +215,12 @@ private fun VolunteerBeranda(
             title = "Program Ajar Saya",
             description = "Lihat program yang berjalan dan hentikan bila perlu.",
             onClick = onOpenPrograms,
+        )
+        ActionCard(
+            icon = Icons.Filled.EventAvailable,
+            title = "Catat Kunjungan",
+            description = "Catat presensi kunjungan rumah beserta foto buktinya.",
+            onClick = onCatatKunjungan,
         )
 
         // Hidden when there are none: the summary card above already says "Belum ada anak yang

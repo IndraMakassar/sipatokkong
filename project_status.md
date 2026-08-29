@@ -32,16 +32,20 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
     replies for the volunteer and a triaged inbox ("Perlu Ditanggapi" / "Sudah Beres").
 
 ### 🚧 In Progress / Partially Built
-*   **Media Compression:** Integration of client-side compressors into the upload pipeline.
+*   **Media Compression:** Wired up for the presensi photo upload only (`core/media/ImageCompressor`).
+    The `tugas-demo` and `dokumentasi` uploads still send raw bytes; `LightCompressor` (video) is
+    still unused.
 *   **Notifications:** Server-side triggers are defined, but real-time client-side handling and push notifications (FCM) are pending.
-*   **Presensi (Attendance):** Relawan vertical slice for logging home visits.
+    The `notif_type` value `'presensi'` remains declared but unused — no trigger writes it.
 
 
 ### ❌ Not Built / Deferred
-*   **Admin Dashboard:** Progress recaps for donors and attendance overviews.
+*   **Admin Dashboard:** Progress recaps for donors. (Attendance overview is built — see above.)
 *   **Data Export:** Exporting progress reports to CSV/PDF.
 *   **Scheduled Reminders:** Automated weekly reminders for parents.
 *   **Offline Mode:** WorkManager queue for uploads during intermittent connectivity.
+*   **In-app video playback:** no media3/ExoPlayer. A demo video is watched by downloading it and
+    opening it in the phone's gallery player.
 
 ## Domain Constraints
 *   **Low Literacy:** UI must be visual-heavy with clear, simple Bahasa Indonesia labels. Mandatory demo videos/photos for tasks.

@@ -66,9 +66,32 @@ data class TaskCompletionInsert(
     val durasi: String? = null,
 )
 
-/** Minimal read model: which occurrences of which tasks are already done. */
+/**
+ * Minimal read model: which occurrences of which tasks are already done.
+ *
+ * [dokumentasiId] is only populated by the single-occurrence query on the detail screen. The home
+ * list deliberately keeps selecting the two narrow columns — it fetches every completion the
+ * parent has, and widening that payload costs data on every home-screen entry.
+ */
 @Serializable
 data class TaskCompletion(
     @SerialName("tugas_id") val tugasId: String,
     @SerialName("occurrence_date") val occurrenceDate: String,
+    @SerialName("dokumentasi_id") val dokumentasiId: String? = null,
+)
+
+/**
+ * Full `public.dokumentasi` row — the proof media a parent submitted.
+ *
+ * Until now this table was write-only: the app inserted rows and never read one back, so the
+ * parent's own evidence disappeared from the UI the moment it was uploaded.
+ */
+@Serializable
+data class Documentation(
+    val id: String,
+    @SerialName("anak_id") val anakId: String,
+    @SerialName("media_kind") val mediaKind: String,
+    @SerialName("media_path") val mediaPath: String,
+    val keterangan: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
 )

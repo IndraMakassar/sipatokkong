@@ -31,6 +31,7 @@ import com.antoniusindra.sipatokkong.ui.admin.EditAccountScreen
 import com.antoniusindra.sipatokkong.ui.admin.EditChildScreen
 import com.antoniusindra.sipatokkong.ui.admin.ManageAccountsScreen
 import com.antoniusindra.sipatokkong.ui.admin.ManageChildrenScreen
+import com.antoniusindra.sipatokkong.ui.admin.RekapAbsensiScreen
 import com.antoniusindra.sipatokkong.ui.auth.login.LoginScreen
 import com.antoniusindra.sipatokkong.ui.feedback.CreateFeedbackScreen
 import com.antoniusindra.sipatokkong.ui.feedback.FeedbackListScreen
@@ -41,6 +42,7 @@ import com.antoniusindra.sipatokkong.ui.home.ParentHomeScreen
 import com.antoniusindra.sipatokkong.ui.home.ParentHomeViewModel
 import com.antoniusindra.sipatokkong.ui.notifications.ParentNotificationScreen
 import com.antoniusindra.sipatokkong.ui.task.TaskDetailScreen
+import com.antoniusindra.sipatokkong.ui.volunteer.CreatePresensiScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.CreateTaskScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.ProgramListScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.TemplateListScreen
@@ -137,6 +139,7 @@ fun SipatokkongMain() {
                             onManageOrangtua = { navController.navigate("manage_orangtua") },
                             onManageRelawan = { navController.navigate("manage_relawan") },
                             onManageAnak = { navController.navigate("manage_anak") },
+                            onRekapAbsensi = { navController.navigate("rekap_absensi") },
                             onLogout = {
                                 scope.launch {
                                     sessionManager.signOut()
@@ -334,6 +337,12 @@ fun SipatokkongMain() {
                         templateId = backStackEntry.arguments?.getString("templateId"),
                         anakId = backStackEntry.arguments?.getString("anakId"),
                     )
+                }
+                composable("rekap_absensi") {
+                    RekapAbsensiScreen(onBack = { navController.popBackStack() })
+                }
+                composable("create_presensi") {
+                    CreatePresensiScreen(onBack = { navController.popBackStack() })
                 }
             }
         }

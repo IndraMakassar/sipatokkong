@@ -1,5 +1,6 @@
 package com.antoniusindra.sipatokkong.data.repository
 
+import com.antoniusindra.sipatokkong.data.model.Documentation
 import com.antoniusindra.sipatokkong.data.model.DocumentationInsert
 import com.antoniusindra.sipatokkong.data.model.InsertedId
 import com.antoniusindra.sipatokkong.data.model.Task
@@ -16,8 +17,6 @@ import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.storage.storage
 import java.time.Instant
-import java.time.LocalDate
-import java.util.UUID
 import kotlin.time.Duration.Companion.hours
 
 class TaskRepository(private val client: SupabaseClient) {
@@ -64,6 +63,13 @@ class TaskRepository(private val client: SupabaseClient) {
     suspend fun signedDemoUrl(path: String): String =
         client.storage.from("tugas-demo").createSignedUrl(path, 1.hours)
 
+    /**
+     * Temporary signed URL for a parent's proof media (for display).
+     * RLS `dokumentasi_read` allows the parent, the assigned volunteer, and admins.
+     */
+    suspend fun signedDocumentationUrl(path: String): String =
+        client.storage.from("dokumentasi").createSignedUrl(path, 1.hours)
+
     /** Uploads the parent's proof media to the private `dokumentasi` bucket; returns the path. */
     suspend fun uploadDocumentation(anakId: String, bytes: ByteArray, ext: String): String =
         uploadTo("dokumentasi", anakId, bytes, ext)
@@ -91,6 +97,29 @@ class TaskRepository(private val client: SupabaseClient) {
         client.postgrest.from("tugas_penyelesaian")
             .select(columns = Columns.list("tugas_id", "occurrence_date"))
             .decodeList()
+
+    /**
+     * One completion, including the `dokumentasi_id` that links to the proof the parent sent.
+     *
+     * Kept apart from [completionsForCurrentUser] on purpose: that one loads every completion for
+     * the home screen, and carrying a third column there would cost data on every entry to buy
+     * something only the detail screen uses.
+     */
+    suspend fun completionFor(tugasId: String, occurrenceDate: String): TaskCompletion? =
+        client.postgrest.from("tugas_penyelesaian")
+            .select(columns = Columns.list("tugas_id", "occurrence_date", "dokumentasi_id")) {
+                filter {
+                    eq("tugas_id", tugasId)
+                    eq("occurrence_date", occurrenceDate)
+                }
+            }
+            .decodeSingleOrNull()
+
+    /** One `dokumentasi` row by id — the proof attached to a completion. */
+    suspend fun getDocumentation(id: String): Documentation? =
+        client.postgrest.from("dokumentasi")
+            .select { filter { eq("id", id) } }
+            .decodeSingleOrNull()
 
     // ---- Relawan: manage own programs ----
 

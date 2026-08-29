@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.ManageAccounts
@@ -47,6 +48,7 @@ fun AdminHomeScreen(
     onManageOrangtua: () -> Unit,
     onManageRelawan: () -> Unit,
     onManageAnak: () -> Unit,
+    onRekapAbsensi: () -> Unit,
     onLogout: () -> Unit
 ) {
     Scaffold(
@@ -148,6 +150,24 @@ fun AdminHomeScreen(
                 description = "Ubah data anak, pindah orang tua & atur relawan.",
                 icon = Icons.Default.Edit,
                 onClick = onManageAnak
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Text(
+                text = "Laporan",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.align(Alignment.Start)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            AdminActionCard(
+                title = "Rekap Absensi Relawan",
+                description = "Jumlah kunjungan rumah tiap relawan dalam rentang tanggal.",
+                icon = Icons.Default.EventAvailable,
+                onClick = onRekapAbsensi
             )
 
             Spacer(modifier = Modifier.height(16.dp))
