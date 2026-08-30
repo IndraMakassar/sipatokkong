@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "27117250869",
+    "project_id": "sipatokkong-885ed",
+    "storage_bucket": "sipatokkong-885ed.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:27117250869:android:b24a60886a441de4cc047c",
+        "android_client_info": {
+          "package_name": "com.antoniusindra.sipatokkong"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA5JpT2KiZg06Ivqo6oH6zEDBLnbCbimLQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

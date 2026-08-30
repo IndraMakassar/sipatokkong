@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.core.media.MediaBucket
 import com.antoniusindra.sipatokkong.core.media.MediaDownloadHandler
 import com.antoniusindra.sipatokkong.core.media.MediaRef
@@ -115,7 +116,7 @@ class PresensiListViewModel(
                 }
             }.onFailure { e ->
                 _uiState.update {
-                    it.copy(isLoading = false, error = e.message ?: "Gagal memuat riwayat presensi")
+                    it.copy(isLoading = false, error = ErrorText.of(e, "Gagal memuat riwayat presensi"))
                 }
             }
         }

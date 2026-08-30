@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.core.recurrence.RecurrenceType
 import com.antoniusindra.sipatokkong.data.model.ChildOption
 import com.antoniusindra.sipatokkong.data.model.MediaKind
@@ -220,7 +221,7 @@ class CreateTaskViewModel(
                 }
                 .onFailure { e ->
                     _uiState.update {
-                        it.copy(isLoadingChildren = false, error = e.message ?: "Gagal memuat daftar anak")
+                        it.copy(isLoadingChildren = false, error = ErrorText.of(e, "Gagal memuat daftar anak"))
                     }
                 }
         }
@@ -249,7 +250,7 @@ class CreateTaskViewModel(
                 }
                 .onFailure { e ->
                     _uiState.update {
-                        it.copy(isApplyingTemplate = false, error = e.message ?: "Gagal memuat template")
+                        it.copy(isApplyingTemplate = false, error = ErrorText.of(e, "Gagal memuat template"))
                     }
                 }
         }
@@ -462,7 +463,7 @@ class CreateTaskViewModel(
                     it.copy(isSubmitting = false, isSuccess = true, templateWarning = warning)
                 }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isSubmitting = false, error = e.message ?: "Gagal menyimpan program ajar") }
+                _uiState.update { it.copy(isSubmitting = false, error = ErrorText.of(e, "Gagal menyimpan program ajar")) }
             }
         }
     }
@@ -537,7 +538,7 @@ class CreateTaskViewModel(
     }.fold(
         onSuccess = { null },
         onFailure = { e ->
-            "Program ajar tersimpan, tetapi templatenya gagal dibuat: ${e.message ?: "kesalahan tidak diketahui"}"
+            "Program ajar tersimpan, tetapi templatenya gagal dibuat: ${ErrorText.of(e, "kesalahan tidak diketahui")}"
         },
     )
 

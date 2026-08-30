@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.data.model.Profile
 import com.antoniusindra.sipatokkong.data.repository.ProfileRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -74,7 +75,7 @@ class EditAccountViewModel(
                 }
             }.onFailure { e ->
                 _uiState.update {
-                    it.copy(isLoading = false, error = e.message ?: "Gagal memuat akun")
+                    it.copy(isLoading = false, error = ErrorText.of(e, "Gagal memuat akun"))
                 }
             }
         }
@@ -115,7 +116,7 @@ class EditAccountViewModel(
                 _uiState.update { it.copy(isSubmitting = false, isSuccess = true) }
             }.onFailure { e ->
                 _uiState.update {
-                    it.copy(isSubmitting = false, error = e.message ?: "Gagal menyimpan perubahan")
+                    it.copy(isSubmitting = false, error = ErrorText.of(e, "Gagal menyimpan perubahan"))
                 }
             }
         }

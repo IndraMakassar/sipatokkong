@@ -6,9 +6,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.data.model.TaskOccurrence
 import com.antoniusindra.sipatokkong.data.model.TaskOccurrences
 import com.antoniusindra.sipatokkong.data.repository.ChildRepository
+import com.antoniusindra.sipatokkong.data.repository.NotificationRepository
 import com.antoniusindra.sipatokkong.data.repository.TaskRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +28,12 @@ data class ParentHomeUiState(
     val today: LocalDate = LocalDate.now(),
     val isLoading: Boolean = true,
     val error: String? = null,
+
+    /**
+     * Unread notifications, for the badge on the bell. Loaded independently of the task list —
+     * see [ParentHomeViewModel.refreshUnread].
+     */
+    val unreadNotifications: Int = 0,
 ) {
     /**
      * What the home screen shows.
@@ -65,6 +73,7 @@ data class ParentHomeUiState(
 class ParentHomeViewModel(
     private val taskRepository: TaskRepository,
     private val childRepository: ChildRepository,
+    private val notificationRepository: NotificationRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ParentHomeUiState())
@@ -75,6 +84,7 @@ class ParentHomeViewModel(
     // mean two network round-trips on every entry — costly for a deliberately data-frugal app.
 
     fun refresh() {
+        refreshUnread()
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             runCatching {
@@ -99,8 +109,28 @@ class ParentHomeViewModel(
                     )
                 }
             }.onFailure { e ->
-                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Gagal memuat data") }
+                _uiState.update { it.copy(isLoading = false, error = ErrorText.of(e, "Gagal memuat data")) }
             }
+        }
+    }
+
+    /**
+     * The unread count behind the bell badge.
+     *
+     * Its own launch and its own `runCatching`, deliberately kept out of [refresh]'s block: that
+     * one is all-or-nothing, so a failing notifications query would wipe the parent's entire task
+     * list off the home screen. It also sets no error on failure — a badge that did not load is not
+     * worth a full-screen error over the thing the parent actually opened the app for. The count
+     * simply stays where it was.
+     *
+     * Runs on every [refresh], including the one `parent_history` triggers, where the badge is not
+     * even on screen. That is one extra request with no response body (`head = true`), which is
+     * cheaper than a flag in this ViewModel's public API to avoid it.
+     */
+    private fun refreshUnread() {
+        viewModelScope.launch {
+            runCatching { notificationRepository.unreadCountForCurrentUser() }
+                .onSuccess { count -> _uiState.update { it.copy(unreadNotifications = count) } }
         }
     }
 
@@ -110,6 +140,7 @@ class ParentHomeViewModel(
                 ParentHomeViewModel(
                     taskRepository = ServiceLocator.taskRepository,
                     childRepository = ServiceLocator.childRepository,
+                    notificationRepository = ServiceLocator.notificationRepository,
                 )
             }
         }

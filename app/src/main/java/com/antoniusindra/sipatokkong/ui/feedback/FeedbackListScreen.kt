@@ -63,14 +63,20 @@ import com.antoniusindra.sipatokkong.ui.theme.StatusTealBg
 import com.antoniusindra.sipatokkong.ui.theme.StatusTealText
 
 
-private data class StatusStyle(val label: String, val bg: Color, val text: Color)
+/** Shared with FeedbackThreadScreen: one chip mapping, so a row and its thread cannot disagree. */
+internal data class StatusStyle(val label: String, val bg: Color, val text: Color)
 
 // Driven by FeedbackTriage.stateOf, the same function behind the tabs. Before, the chip read only
 // `feedback.status` while the tabs read `needsAttention`, so a positive unanswered note sat under
 // "Sudah Beres" wearing an orange "Menunggu" -- the row arguing with the tab above it.
 //
-// (The `feedback_status` enum also declares 'in_process', but nothing writes it, so it has no chip.)
-private fun feedbackChipStyle(state: FeedbackState): StatusStyle = when (state) {
+// Migration 0011 finally writes 'in_process' -- a parent replying after an answer -- and
+// FeedbackTriage folds it into PERLU_DIBALAS, so it needs no chip of its own. To a volunteer the
+// row means the same thing it meant the first time: this one is waiting on you.
+//
+// `internal`, and the thread screen's detail card calls this rather than keeping its own copy.
+// Two hand-maintained copies of exactly this mapping is how the chip came to argue with the tab.
+internal fun feedbackChipStyle(state: FeedbackState): StatusStyle = when (state) {
     FeedbackState.DIJAWAB -> StatusStyle("Dijawab", StatusGreenBg, StatusGreenText)
     FeedbackState.PERLU_DIBALAS -> StatusStyle("Perlu Dibalas", StatusOrangeBg, StatusOrangeText)
     FeedbackState.KABAR_BAIK -> StatusStyle("Kabar Baik", StatusTealBg, StatusTealText)
@@ -125,7 +131,7 @@ fun FeedbackListScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 items(ui.items) { fb ->
-                    FeedbackRow(fb, onClick = { onOpenThread(fb.id) }, today = today)
+                    FeedbackRow(fb, who = ui.whoOf(fb), onClick = { onOpenThread(fb.id) }, today = today)
                 }
             }
 
@@ -180,7 +186,7 @@ fun FeedbackListScreen(
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             items(shown) { fb ->
-                                FeedbackRow(fb, onClick = { onOpenThread(fb.id) }, today = today)
+                                FeedbackRow(fb, who = ui.whoOf(fb), onClick = { onOpenThread(fb.id) }, today = today)
                             }
                         }
                     }
@@ -234,7 +240,7 @@ fun FeedbackListScreen(
 }
 
 @Composable
-private fun FeedbackRow(fb: Feedback, onClick: () -> Unit, today: LocalDate) {
+private fun FeedbackRow(fb: Feedback, who: String?, onClick: () -> Unit, today: LocalDate) {
     val style = feedbackChipStyle(FeedbackTriage.stateOf(fb))
     Card(
         onClick = onClick,
@@ -259,6 +265,19 @@ private fun FeedbackRow(fb: Feedback, onClick: () -> Unit, today: LocalDate) {
             }
 
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                // Above the headline, because for a volunteer with four assigned children "which
+                // child" is the question asked first and the headline is the answer to the second.
+                // Null for a parent, whose notes are all about the same child.
+                who?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MutedText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         // Not `fb.isi`: that is auto-filled with a constant when the parent types

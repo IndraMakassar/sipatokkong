@@ -44,6 +44,35 @@ object FeedbackMood {
 }
 
 /**
+ * What `feedback.isi` is filled with when the parent types no free text.
+ *
+ * It exists because `isi` is `not null` in Postgres while the form's "Catatan Tambahan" is
+ * optional. Named here rather than left as a literal because the display side has to recognise it:
+ * used as a row headline it makes every chip-only note look identical.
+ */
+const val CATATAN_RUTIN = "Catatan rutin perkembangan anak."
+
+/**
+ * True when the parent actually typed something into "Catatan Tambahan".
+ *
+ * The form's free-text field is optional while `feedback.isi` is `not null`, so
+ * `CreateFeedbackViewModel` backfills an empty one with [CATATAN_RUTIN]. That backfill is what
+ * makes this knowable: the app can tell "typed nothing" from "typed something" without reading a
+ * single word, so nothing here has to guess at meaning or match Indonesian keywords.
+ *
+ * Equality rather than `startsWith`: a parent who types that exact sentence and then adds to it
+ * has said something. [CATATAN_RUTIN] is 32 characters and the notification trigger truncates at
+ * 120, so truncation cannot manufacture a false match either.
+ *
+ * Extracted because three callers had grown their own copy of this test -- `FeedbackSummary`,
+ * `NotifDisplay.bodyLineOf`, and now `FeedbackTriage`, where it decides whether a note needs a
+ * volunteer's attention. Three copies of a predicate that answers "did this parent say anything"
+ * is how they drift apart.
+ */
+fun hasTypedNote(isi: String?): Boolean =
+    isi?.trim()?.let { it.isNotEmpty() && it != CATATAN_RUTIN } == true
+
+/**
  * The quick-pick chips on the behavior-note form's "Apakah ada kendala saat terapi?" section.
  *
  * Note that the section is a mixed bag despite its name: two of the five options ([LANCAR],
@@ -54,15 +83,6 @@ object FeedbackMood {
  * (see `CreateFeedbackViewModel.submit`), so any code reading them back must split on [SEPARATOR]
  * rather than substring-match the whole string.
  */
-/**
- * What `feedback.isi` is filled with when the parent types no free text.
- *
- * It exists because `isi` is `not null` in Postgres while the form's "Catatan Tambahan" is
- * optional. Named here rather than left as a literal because the display side has to recognise it:
- * used as a row headline it makes every chip-only note look identical.
- */
-const val CATATAN_RUTIN = "Catatan rutin perkembangan anak."
-
 object FeedbackChallenge {
     const val SULIT_FOKUS = "Sulit Fokus"
     const val MUDAH_LELAH = "Mudah Lelah"

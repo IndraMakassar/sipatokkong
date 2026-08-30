@@ -7,11 +7,16 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.data.model.Feedback
 import com.antoniusindra.sipatokkong.data.model.FeedbackReply
 import com.antoniusindra.sipatokkong.data.model.FeedbackReplyInsert
 import com.antoniusindra.sipatokkong.data.model.UserRole
+import com.antoniusindra.sipatokkong.data.repository.ChildRepository
 import com.antoniusindra.sipatokkong.data.repository.FeedbackRepository
+import com.antoniusindra.sipatokkong.data.repository.ProfileRepository
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,10 +33,18 @@ data class FeedbackThreadUiState(
     val replyText: String = "",
     val isSending: Boolean = false,
     val sendError: String? = null,
-)
+    val childName: String? = null,
+    /** Null for a parent viewing their own note: their own name would be noise. */
+    val parentName: String? = null,
+) {
+    /** "Andi · Ibu Sari" for a volunteer, "Andi" for a parent, null while either is unknown. */
+    val who: String? get() = FeedbackSummary.whoLine(childName, parentName)
+}
 
 class FeedbackThreadViewModel(
     private val feedbackRepository: FeedbackRepository,
+    private val childRepository: ChildRepository,
+    private val profileRepository: ProfileRepository,
     private val sessionManager: SessionManager,
 ) : ViewModel() {
 
@@ -56,14 +69,37 @@ class FeedbackThreadViewModel(
         val id = feedbackId ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, loadError = null) }
+            val viewerIsParent = _uiState.value.isParent
             runCatching {
                 val fb = feedbackRepository.get(id) ?: error("Feedback tidak ditemukan.")
-                val replies = feedbackRepository.replies(id)
-                fb to replies
-            }.onSuccess { (fb, replies) ->
-                _uiState.update { it.copy(isLoading = false, feedback = fb, replies = replies) }
+                // The three reads that follow are independent of each other, so they go in
+                // parallel -- same idiom and same justification as VolunteerHomeViewModel. They
+                // cannot start before `fb` lands, because the ids they need are on it.
+                coroutineScope {
+                    val replies = async { feedbackRepository.replies(id) }
+                    // getChild, not childrenForCurrentVolunteer: the latter filters is_active, so a
+                    // note about a child who has since left the programme would lose its name --
+                    // and that is exactly the old note whose context is hardest to reconstruct.
+                    val child = async { runCatching { childRepository.getChild(fb.anakId) }.getOrNull() }
+                    // Skipped for a parent: it is their own name, and this is a round trip.
+                    val parent = async {
+                        if (viewerIsParent) null
+                        else runCatching { profileRepository.getProfile(fb.orangtuaId) }.getOrNull()
+                    }
+                    Loaded(fb, replies.await(), child.await()?.nama, parent.await()?.fullName)
+                }
+            }.onSuccess { loaded ->
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        feedback = loaded.feedback,
+                        replies = loaded.replies,
+                        childName = loaded.childName,
+                        parentName = loaded.parentName,
+                    )
+                }
             }.onFailure { e ->
-                _uiState.update { it.copy(isLoading = false, loadError = e.message ?: "Gagal memuat") }
+                _uiState.update { it.copy(isLoading = false, loadError = ErrorText.of(e, "Gagal memuat")) }
             }
         }
     }
@@ -98,16 +134,32 @@ class FeedbackThreadViewModel(
                 _uiState.update { it.copy(isSending = false, replyText = if (text == null) "" else it.replyText) }
                 fetch() // reload replies + updated status
             } catch (e: Exception) {
-                _uiState.update { it.copy(isSending = false, sendError = e.message ?: "Gagal mengirim balasan") }
+                _uiState.update { it.copy(isSending = false, sendError = ErrorText.of(e, "Gagal mengirim balasan")) }
             }
         }
     }
+
+    /**
+     * One load's results.
+     *
+     * The two name lookups are best-effort and land here as nulls on failure: a name is context on
+     * a screen whose actual content is the note and its replies, and failing the whole load
+     * because a profile row could not be read would hide the conversation to protect a label.
+     */
+    private data class Loaded(
+        val feedback: Feedback,
+        val replies: List<FeedbackReply>,
+        val childName: String?,
+        val parentName: String?,
+    )
 
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 FeedbackThreadViewModel(
                     feedbackRepository = ServiceLocator.feedbackRepository,
+                    childRepository = ServiceLocator.childRepository,
+                    profileRepository = ServiceLocator.profileRepository,
                     sessionManager = ServiceLocator.sessionManager,
                 )
             }

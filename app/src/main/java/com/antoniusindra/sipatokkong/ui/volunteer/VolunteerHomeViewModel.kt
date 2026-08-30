@@ -6,9 +6,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.data.model.AssignedChild
 import com.antoniusindra.sipatokkong.data.model.Task
 import com.antoniusindra.sipatokkong.data.repository.ChildRepository
+import com.antoniusindra.sipatokkong.data.repository.NotificationRepository
 import com.antoniusindra.sipatokkong.data.repository.ProfileRepository
 import com.antoniusindra.sipatokkong.data.repository.TaskRepository
 import kotlinx.coroutines.async
@@ -28,6 +30,12 @@ data class VolunteerHomeUiState(
     val today: LocalDate = LocalDate.now(),
     val isLoading: Boolean = true,
     val error: String? = null,
+
+    /**
+     * Unread notifications, for the badge on the bell. Loaded independently of everything else on
+     * this state — see [VolunteerHomeViewModel.refreshUnread].
+     */
+    val unreadNotifications: Int = 0,
 ) {
     /**
      * Programs still producing work.
@@ -93,12 +101,14 @@ class VolunteerHomeViewModel(
     private val taskRepository: TaskRepository,
     private val childRepository: ChildRepository,
     private val profileRepository: ProfileRepository,
+    private val notificationRepository: NotificationRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(VolunteerHomeUiState())
     val uiState: StateFlow<VolunteerHomeUiState> = _uiState.asStateFlow()
 
     fun refresh() {
+        refreshUnread()
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             runCatching {
@@ -126,9 +136,32 @@ class VolunteerHomeViewModel(
                 }
             }.onFailure { e ->
                 _uiState.update {
-                    it.copy(isLoading = false, error = e.message ?: "Gagal memuat data")
+                    it.copy(isLoading = false, error = ErrorText.of(e, "Gagal memuat data"))
                 }
             }
+        }
+    }
+
+    /**
+     * The unread count behind the bell badge.
+     *
+     * Its own launch and its own `runCatching`, deliberately outside [refresh]'s block. That one is
+     * all-or-nothing: `coroutineScope` propagates a child's failure, so folding this in as a fourth
+     * `async` would let a notifications outage set `error` and replace the whole Beranda — hero
+     * card, action cards, child list — with a failure message, over a badge. It also sets no error
+     * on failure: a count that did not load is not worth a full-screen error over the thing the
+     * volunteer actually opened the app for. The count simply stays where it was.
+     *
+     * This does not contradict the concurrency note in [refresh]. The two launches race; neither
+     * waits on the other, and `unreadCountForCurrentUser` returns no response body at all.
+     *
+     * Copied deliberately from `ParentHomeViewModel.refreshUnread` — same rule, and the two
+     * ViewModels have no shared base to hold it.
+     */
+    private fun refreshUnread() {
+        viewModelScope.launch {
+            runCatching { notificationRepository.unreadCountForCurrentUser() }
+                .onSuccess { count -> _uiState.update { it.copy(unreadNotifications = count) } }
         }
     }
 
@@ -139,6 +172,7 @@ class VolunteerHomeViewModel(
                     taskRepository = ServiceLocator.taskRepository,
                     childRepository = ServiceLocator.childRepository,
                     profileRepository = ServiceLocator.profileRepository,
+                    notificationRepository = ServiceLocator.notificationRepository,
                 )
             }
         }

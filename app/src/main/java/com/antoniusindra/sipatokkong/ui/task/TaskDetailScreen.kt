@@ -40,6 +40,17 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.core.app.NotificationManagerCompat
+import com.antoniusindra.sipatokkong.core.push.PushPayload
+import android.net.Uri
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import com.antoniusindra.sipatokkong.core.media.CameraUriManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -67,6 +78,7 @@ import com.antoniusindra.sipatokkong.ui.theme.MutedText
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import com.antoniusindra.sipatokkong.ui.components.MediaPickerBox
 
 private val DetailDateFormat =
     DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy", Locale.forLanguageTag("id-ID"))
@@ -75,13 +87,32 @@ private val DetailDateFormat =
 @Composable
 fun TaskDetailScreen(
     tugasId: String,
-    occurrenceDate: LocalDate,
+    /**
+     * The day to open, or null when the caller has none -- a notification tap, which carries only
+     * the task id. The ViewModel then resolves one from the task's recurrence rule.
+     */
+    occurrenceDate: LocalDate?,
     onBack: () -> Unit,
     viewModel: TaskDetailViewModel = viewModel(factory = TaskDetailViewModel.Factory),
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
     val downloadState by viewModel.download.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+
+    // Clears the tray card for this task on the way in.
+    //
+    // setAutoCancel(true) already covers arriving BY the notification. This covers the
+    // other door -- reaching here from the inbox or the home screen -- where the card
+    // would otherwise sit there. Now that messages accumulate into a single card, one
+    // left behind would keep growing with replies the reader has already seen.
+    //
+    // In the composable rather than the ViewModel: the ViewModels here stay free of
+    // Android framework types, and a notification is a view concern.
+    val trayContext = LocalContext.current
+    LaunchedEffect(tugasId) {
+        NotificationManagerCompat.from(trayContext).cancel(PushPayload.trayIdForEntity(tugasId))
+    }
 
     LaunchedEffect(tugasId, occurrenceDate) { viewModel.load(tugasId, occurrenceDate) }
     LaunchedEffect(ui.isSuccess) {
@@ -94,6 +125,37 @@ fun TaskDetailScreen(
     val proofPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> if (uri != null) viewModel.onProofPicked(uri) }
+
+    // rememberSaveable, not remember: handing control to the camera app can take this process down,
+    // and a plain remember would come back null with the photo already on disk and unreachable.
+    // Same reason CreatePresensiScreen does it.
+    var cameraUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success -> if (success) cameraUri?.let { viewModel.onProofPicked(it) } }
+
+    var showSourceChoice by rememberSaveable { mutableStateOf(false) }
+
+    if (showSourceChoice) {
+        ProofSourceDialog(
+            onDismiss = { showSourceChoice = false },
+            onCamera = {
+                showSourceChoice = false
+                // createTempUri writes into cacheDir/camera, which is the only root file_paths.xml
+                // exports -- anywhere else and FileProvider throws "Failed to find configured root".
+                val uri = CameraUriManager.createTempUri(context)
+                cameraUri = uri
+                cameraLauncher.launch(uri)
+            },
+            onGallery = {
+                showSourceChoice = false
+                proofPicker.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+                )
+            },
+        )
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -118,11 +180,7 @@ fun TaskDetailScreen(
                     alreadyDone = ui.alreadyDone,
                     hasProof = ui.proofUri != null,
                     isSubmitting = ui.isSubmitting,
-                    onPick = {
-                        proofPicker.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
-                        )
-                    },
+                    onPick = { showSourceChoice = true },
                     onSubmit = viewModel::submit,
                 )
             }
@@ -146,6 +204,7 @@ fun TaskDetailScreen(
                 onResponse = viewModel::onResponseChange,
                 onDuration = viewModel::onDurationChange,
                 onCatatan = viewModel::onCatatanChange,
+                onPickProof = { showSourceChoice = true },
             )
         }
     }
@@ -169,6 +228,7 @@ private fun DetailBody(
     onResponse: (ChildResponse) -> Unit,
     onDuration: (WorkDuration) -> Unit,
     onCatatan: (String) -> Unit,
+    onPickProof: () -> Unit,
 ) {
     val tugas = ui.tugas!!
     Column(
@@ -309,22 +369,25 @@ private fun DetailBody(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            // Selected proof preview
-            if (ui.proofUri != null) {
-                Text("Bukti terpilih", fontWeight = FontWeight.SemiBold, color = MutedText)
-                if (ui.proofKind == MediaKind.IMAGE) {
-                    AsyncImage(
-                        model = ui.proofUri,
-                        contentDescription = "Bukti",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(160.dp)
-                            .clip(RoundedCornerShape(12.dp)),
-                    )
-                } else {
-                    Text("🎬 Video bukti terpilih", style = MaterialTheme.typography.bodyMedium)
-                }
-            }
+            // The same MediaPickerBox the volunteer's presensi and program-ajar forms use, rather
+            // than a second way of doing the same thing. It replaces a plain AsyncImage that showed
+            // the chosen file and could not be tapped: a parent who picked the wrong photo had no
+            // way to change it except leaving the screen and coming back.
+            //
+            // Moving the picker here is also what lets the bottom button mean ONE thing. It used to
+            // pick when there was no proof and submit when there was, distinguished only by its
+            // label -- two similar sentences carrying the difference between "choose a file" and
+            // "send this, irreversibly", on a screen built for people who find reading hard.
+            Text("Bukti Pengerjaan", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            MediaPickerBox(
+                hasMedia = ui.proofUri != null,
+                previewUrl = ui.proofUri,
+                mediaKind = ui.proofKind,
+                mediaName = null,
+                onPick = onPickProof,
+                emptyPrompt = "Ketuk untuk ambil foto atau pilih dari galeri",
+                formatHint = "Foto dikecilkan otomatis sebelum diunggah",
+            )
 
             if (ui.submitError != null) {
                 Text(ui.submitError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
@@ -481,6 +544,54 @@ private fun ResponseCard(
     }
 }
 
+/**
+ * Camera or gallery, asked once, with two equally weighted choices.
+ *
+ * Two full-width buttons rather than a bottom sheet: this audience is low-literacy, and a labelled
+ * target with an icon is easier to hit and to understand than a sheet whose affordance has to be
+ * learned. AlertDialog is also what the notification sweep confirmation already uses, so it is one
+ * pattern in the app rather than two.
+ */
+@Composable
+private fun ProofSourceDialog(
+    onDismiss: () -> Unit,
+    onCamera: () -> Unit,
+    onGallery: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Kirim bukti dari mana?", fontWeight = FontWeight.Bold) },
+        text = { Text("Ambil foto sekarang, atau pilih file yang sudah ada di HP Anda.") },
+        // All three in confirmButton, and dismissButton left unset on purpose. AlertDialog lays the
+        // two slots out side by side on one row, so a full-width Column in one of them squeezes
+        // whatever is in the other -- which is exactly what "Batal" did on the first attempt.
+        //
+        // Stacked full width instead, in reading order, with Batal last and visually quietest. For
+        // this audience three labelled targets down the screen beat two side by side, where the
+        // narrower one is easy to mistake for the answer.
+        confirmButton = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(onClick = onCamera, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.PhotoCamera, contentDescription = null)
+                    Spacer(Modifier.size(8.dp))
+                    Text("Ambil Foto")
+                }
+                OutlinedButton(onClick = onGallery, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.PhotoLibrary, contentDescription = null)
+                    Spacer(Modifier.size(8.dp))
+                    Text("Pilih dari Galeri")
+                }
+                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+                    Text("Batal")
+                }
+            }
+        },
+    )
+}
+
 @Composable
 private fun SubmitBar(
     alreadyDone: Boolean,
@@ -492,7 +603,7 @@ private fun SubmitBar(
     Surface(shadowElevation = 8.dp, color = Color.White) {
         Box(Modifier.padding(16.dp)) {
             Button(
-                onClick = { if (hasProof) onSubmit() else onPick() },
+                onClick = onSubmit,
                 enabled = !alreadyDone && !isSubmitting,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -505,11 +616,10 @@ private fun SubmitBar(
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
                     alreadyDone -> Text("Sudah Selesai")
-                    !hasProof -> {
-                        Icon(Icons.Filled.PhotoCamera, contentDescription = null)
-                        Spacer(Modifier.size(8.dp))
-                        Text("Kirim Bukti Foto & Selesai")
-                    }
+                    // One label, one meaning. Left ENABLED without proof on purpose: tapping it
+                    // then produces "Pilih foto/video bukti terlebih dahulu.", which points at the
+                    // box above. A disabled button would be silent about why, and silence is the
+                    // worst answer to give someone who cannot read their way out of it.
                     else -> Text("Kirim & Tandai Selesai")
                 }
             }

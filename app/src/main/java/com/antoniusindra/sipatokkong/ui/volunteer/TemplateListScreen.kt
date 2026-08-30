@@ -49,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -233,12 +234,20 @@ private fun TemplateRow(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text(template.nama, fontWeight = FontWeight.Bold, maxLines = 2)
+                // maxLines without overflow clips mid-glyph instead of ellipsising, so a long
+                // template name ended in half a letter with nothing to say it had been cut.
+                Text(
+                    template.nama,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Text(
                     template.judul,
                     style = MaterialTheme.typography.bodySmall,
                     color = MutedText,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -255,6 +264,7 @@ private fun TemplateRow(
                         style = MaterialTheme.typography.labelSmall,
                         color = MutedText,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }

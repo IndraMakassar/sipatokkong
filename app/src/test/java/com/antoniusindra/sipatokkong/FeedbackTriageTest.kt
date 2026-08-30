@@ -1,8 +1,12 @@
 package com.antoniusindra.sipatokkong
 
+import com.antoniusindra.sipatokkong.data.model.CATATAN_RUTIN
 import com.antoniusindra.sipatokkong.data.model.Feedback
 import com.antoniusindra.sipatokkong.data.model.FeedbackChallenge
 import com.antoniusindra.sipatokkong.data.model.FeedbackMood
+import com.antoniusindra.sipatokkong.ui.feedback.FEEDBACK_STATUS_ANSWERED
+import com.antoniusindra.sipatokkong.ui.feedback.FEEDBACK_STATUS_IN_PROCESS
+import com.antoniusindra.sipatokkong.ui.feedback.FeedbackState
 import com.antoniusindra.sipatokkong.ui.feedback.FeedbackTriage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -19,17 +23,21 @@ import org.junit.Test
  */
 class FeedbackTriageTest {
 
+    // `isi` defaults to the value the form backfills when the parent types nothing, because that
+    // is the common note and the one every pre-existing test in this file assumes. It is a
+    // parameter now: since the free-text rule landed, `isi` decides triage outcomes.
     private fun note(
         mood: String? = FeedbackMood.SENANG,
         kendala: String? = null,
         status: String = "open",
+        isi: String = CATATAN_RUTIN,
     ) = Feedback(
         id = "fb-1",
         anakId = "anak-1",
         orangtuaId = "ortu-1",
         kendala = kendala,
         mood = mood,
-        isi = "Catatan rutin perkembangan anak.",
+        isi = isi,
         status = status,
     )
 
@@ -126,5 +134,75 @@ class FeedbackTriageTest {
         assertEquals("\uD83E\uDD12", FeedbackMood.emojiOf("Sakit"))
         assertEquals("\uD83D\uDCDD", FeedbackMood.emojiOf(null))
         assertEquals("\uD83D\uDCDD", FeedbackMood.emojiOf("Marah"))
+    }
+
+    // ---- a parent replying after an answer (migration 0011) ----
+
+    @Test
+    fun `a thread the parent replied to needs attention again`() {
+        // The reported defect, at its smallest: a happy note with no chips, already answered, that
+        // the parent then replied to. Everything except `status` says "nothing to see here".
+        val fb = note(mood = FeedbackMood.SENANG, status = FEEDBACK_STATUS_IN_PROCESS)
+        assertTrue(FeedbackTriage.needsAttention(fb))
+    }
+
+    @Test
+    fun `in_process reads as work and answered reads as done`() {
+        // Not a test of branch order. `status` holds one value, so the two checks in needsAttention
+        // are mutually exclusive and swapping them changes nothing -- verified by doing it. What
+        // this pins is that the two states map to opposite chips, which is the visible behaviour.
+        assertEquals(FeedbackState.PERLU_DIBALAS, FeedbackTriage.stateOf(note(status = FEEDBACK_STATUS_IN_PROCESS)))
+        assertEquals(FeedbackState.DIJAWAB, FeedbackTriage.stateOf(note(status = FEEDBACK_STATUS_ANSWERED)))
+    }
+
+    @Test
+    fun `a reopened thread moves back out of the settled bucket`() {
+        val reopened = note(status = FEEDBACK_STATUS_IN_PROCESS)
+        val answered = note(status = FEEDBACK_STATUS_ANSWERED)
+        assertEquals(listOf(reopened), FeedbackTriage.needsAttention(listOf(reopened, answered)))
+        assertEquals(listOf(answered), FeedbackTriage.settled(listOf(reopened, answered)))
+    }
+
+    @Test
+    fun `the in_process storage string is frozen`() {
+        // Same contract as the mood/chip strings below: this value is compared verbatim against
+        // what the Postgres trigger writes, so renaming it here silently stops reopening threads.
+        assertEquals("in_process", FEEDBACK_STATUS_IN_PROCESS)
+    }
+
+    // ---- free text as a signal ----
+
+    @Test
+    fun `a happy note the parent typed into needs attention`() {
+        // The second reported defect. Mood says Senang, no chips at all -- and the parent typed
+        // that the child had a fever. Before this rule the note read "Kabar Baik".
+        val fb = note(mood = FeedbackMood.SENANG, isi = "anak demam 3 hari, terapi dilewat")
+        assertTrue(FeedbackTriage.needsAttention(fb))
+        assertEquals(FeedbackState.PERLU_DIBALAS, FeedbackTriage.stateOf(fb))
+    }
+
+    @Test
+    fun `the form's own backfill is not typing`() {
+        // If this ever fails, EVERY note in the pilot lands in "Perlu Ditanggapi" -- mood-plus-chips
+        // with no typing is the quickest way to use the form and therefore the common one.
+        assertFalse(FeedbackTriage.needsAttention(note(isi = CATATAN_RUTIN)))
+    }
+
+    @Test
+    fun `an empty or whitespace note is not typing`() {
+        assertFalse(FeedbackTriage.needsAttention(note(isi = "")))
+        assertFalse(FeedbackTriage.needsAttention(note(isi = "    ")))
+        // Whitespace that is not a space, built without an escape so the fixture reads as
+        // exactly what it is.
+        assertFalse(FeedbackTriage.needsAttention(note(isi = "  " + System.lineSeparator())))
+    }
+
+    @Test
+    fun `an answered thread stays settled however much the parent wrote`() {
+        // Free text is a signal, not an override: the volunteer has already responded to this one,
+        // and only a *reply* (in_process) brings it back. Otherwise the list would never empty,
+        // which is the original problem the triage split exists to solve.
+        val fb = note(status = FEEDBACK_STATUS_ANSWERED, isi = "anak demam 3 hari")
+        assertFalse(FeedbackTriage.needsAttention(fb))
     }
 }

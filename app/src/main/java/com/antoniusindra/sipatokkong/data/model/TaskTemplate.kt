@@ -72,6 +72,12 @@ data class TaskTemplateInsert(
     @SerialName("media_path") val mediaPath: String,
     @SerialName("priority_level") val priorityLevel: String,
     @SerialName("alat_bantu") val alatBantu: List<String>? = null,
+    // Serialised OUT of the request whenever it equals this default -- kotlinx.serialization omits
+    // defaulted properties, and supabase-kt leaves `encodeDefaults` off. That is harmless here and
+    // only here, because the column is `not null default 'once'` too, so the value the server
+    // applies is the value that was dropped. It stops being harmless the moment those two defaults
+    // disagree, and nothing enforces that they agree. See NotificationReadUpdate, where the same
+    // omission silently broke every write because there was no column default to catch it.
     val recurrence: String = "once",
     @SerialName("recurrence_days") val recurrenceDays: List<Int>? = null,
     @SerialName("recurrence_day_of_month") val recurrenceDayOfMonth: Int? = null,

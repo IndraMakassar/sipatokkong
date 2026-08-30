@@ -41,8 +41,17 @@ class VolunteerHomeStateTest {
         deadline = deadline,
     )
 
-    private fun state(programs: List<Task> = emptyList(), children: List<AssignedChild> = emptyList()) =
-        VolunteerHomeUiState(programs = programs, children = children, today = today, isLoading = false)
+    private fun state(
+        programs: List<Task> = emptyList(),
+        children: List<AssignedChild> = emptyList(),
+        unread: Int = 0,
+    ) = VolunteerHomeUiState(
+        programs = programs,
+        children = children,
+        today = today,
+        isLoading = false,
+        unreadNotifications = unread,
+    )
 
     // ---- activeCount ----
 
@@ -134,5 +143,24 @@ class VolunteerHomeStateTest {
                 children = listOf(AssignedChild("1", "Andi")),
             ).summary,
         )
+    }
+
+    // ---- notifications ----
+
+    @Test
+    fun `the summary and the counts do not move when notifications do`() {
+        // The reason unreadNotifications is loaded by its own launch and its own runCatching rather
+        // than as a fourth async inside refresh()'s coroutineScope. That block is all-or-nothing, so
+        // folding the count in would let a notifications outage blank the hero card, the action
+        // cards and the child list. Nothing else on this state may read the count.
+        val busy = state(
+            programs = listOf(task("a")),
+            children = listOf(AssignedChild("1", "Andi")),
+            unread = 7,
+        )
+        val quiet = busy.copy(unreadNotifications = 0)
+        assertEquals(quiet.summary, busy.summary)
+        assertEquals(quiet.activeCount, busy.activeCount)
+        assertEquals(quiet.childCount, busy.childCount)
     }
 }

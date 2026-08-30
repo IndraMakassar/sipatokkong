@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.data.model.Profile
 import com.antoniusindra.sipatokkong.data.repository.ProfileRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -97,7 +98,7 @@ class ProfileViewModel(
                     )
                 }
             }.onFailure { e ->
-                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Gagal memperbarui profil") }
+                _uiState.update { it.copy(isLoading = false, error = ErrorText.of(e, "Gagal memperbarui profil")) }
             }
         }
     }

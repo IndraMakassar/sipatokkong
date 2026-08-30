@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.google.services)
 }
 
 // Read Supabase secrets from local.properties (never committed / never the service_role key)
@@ -89,6 +90,14 @@ dependencies {
     // Upload queue + local cache
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.datastore.preferences)
+
+    // Splash screen. Backports the Android 12 splash to API 23, which is the point: below 12 there
+    // is no system splash at all, and minSdk here is 27.
+    implementation(libs.androidx.core.splashscreen)
+
+    // Push notifications (BOM-aligned)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
 
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))

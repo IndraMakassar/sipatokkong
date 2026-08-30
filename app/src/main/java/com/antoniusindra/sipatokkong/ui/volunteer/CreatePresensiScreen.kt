@@ -54,6 +54,7 @@ import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
 import com.antoniusindra.sipatokkong.ui.theme.MutedText
 import com.antoniusindra.sipatokkong.ui.theme.StatusRedBg
 import com.antoniusindra.sipatokkong.ui.theme.StatusRedText
+import com.antoniusindra.sipatokkong.ui.components.MediaPickerBox
 
 /**
  * "Catat Kunjungan" — the volunteer's attendance form.
@@ -161,7 +162,8 @@ fun CreatePresensiScreen(
             // ---- Foto bukti ----
             SectionLabel("Foto Bukti Kunjungan*")
             MediaPickerBox(
-                mediaUri = ui.fotoUri,
+                hasMedia = ui.fotoUri != null,
+                previewUrl = ui.fotoUri,
                 // Always an image: the bucket rejects video, and everything is re-encoded to JPEG.
                 mediaKind = MediaKind.IMAGE.takeIf { ui.fotoUri != null },
                 mediaName = null,

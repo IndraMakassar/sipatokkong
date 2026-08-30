@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.data.model.ChildOption
 import com.antoniusindra.sipatokkong.data.model.CATATAN_RUTIN
 import com.antoniusindra.sipatokkong.data.model.FeedbackInsert
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.antoniusindra.sipatokkong.core.net.Connectivity
 
 data class CreateFeedbackUiState(
     val child: ChildOption? = null,
@@ -43,7 +45,11 @@ class CreateFeedbackViewModel(
             _uiState.update { it.copy(isLoadingChild = true) }
             runCatching { childRepository.childForCurrentParent() }
                 .onSuccess { child -> _uiState.update { it.copy(child = child, isLoadingChild = false) } }
-                .onFailure { e -> _uiState.update { it.copy(isLoadingChild = false, error = e.message) } }
+                .onFailure { e ->
+                    _uiState.update {
+                        it.copy(isLoadingChild = false, error = ErrorText.of(e, "Gagal memuat data anak"))
+                    }
+                }
         }
     }
 
@@ -75,6 +81,15 @@ class CreateFeedbackViewModel(
             orangtuaId == null -> { _uiState.update { it.copy(error = "Sesi tidak valid. Login ulang.") }; return }
         }
 
+        // Asked before the attempt, not after it. Without this the user waits out a connection
+        // timeout to be told something the phone already knew -- and here they burn upload data
+        // getting there. A false positive is possible (see Connectivity), so the mapped error on
+        // the way back still has the last word.
+        if (!Connectivity.isOnline(ServiceLocator.appContext)) {
+            _uiState.update { it.copy(error = ErrorText.OFFLINE) }
+            return
+        }
+
         viewModelScope.launch {
             _uiState.update { it.copy(isSubmitting = true, error = null) }
             try {
@@ -95,7 +110,7 @@ class CreateFeedbackViewModel(
                 )
                 _uiState.update { it.copy(isSubmitting = false, isSuccess = true) }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isSubmitting = false, error = e.message ?: "Gagal mengirim feedback") }
+                _uiState.update { it.copy(isSubmitting = false, error = ErrorText.of(e, "Gagal mengirim feedback")) }
             }
         }
     }

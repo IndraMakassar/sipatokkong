@@ -7,7 +7,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
+import com.antoniusindra.sipatokkong.core.media.ImageCompressor
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.core.media.MediaBucket
 import com.antoniusindra.sipatokkong.core.media.MediaDownloadHandler
 import com.antoniusindra.sipatokkong.core.media.MediaRef
@@ -28,6 +30,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.antoniusindra.sipatokkong.core.net.Connectivity
 
 data class TaskDetailUiState(
     val isLoading: Boolean = true,
@@ -74,36 +77,51 @@ class TaskDetailViewModel(
     fun proofRef(): MediaRef? =
         _uiState.value.submittedProof?.let { MediaRef(MediaBucket.DOKUMENTASI, it.mediaPath) }
 
-    fun load(id: String, occurrenceDate: LocalDate) {
+    /**
+     * @param occurrenceDate the day being worked on, or null when the caller has none.
+     *
+     * Null arrives from a notification tap: `notifications` has no date column, so the route
+     * declares that argument optional. Resolving it here is free -- the recurrence rule needed to
+     * answer it lives on the `Task` this function fetches on its first line anyway, so the
+     * notification path costs exactly the same round trips as the ordinary one.
+     */
+    fun load(id: String, occurrenceDate: LocalDate?) {
         if (loaded) return
         loaded = true
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, loadError = null) }
             runCatching {
                 val tugas = taskRepository.getTask(id) ?: error("Tugas tidak ditemukan.")
+                val date = occurrenceDate
+                    ?: tugas.toRecurrenceRule().occurrenceNearest(LocalDate.now())
+                    ?: error(NO_OCCURRENCE)
                 val url = runCatching { taskRepository.signedDemoUrl(tugas.mediaPath) }.getOrNull()
                 // Completion is per date, so a recurring program stays open on other days.
                 val done = TaskOccurrences.isDone(
                     completions = taskRepository.completionsForCurrentUser(),
                     taskId = id,
-                    date = occurrenceDate,
+                    date = date,
                 )
-                val proof = if (done) loadProof(id, occurrenceDate) else null
-                Loaded(tugas, url, done, proof?.first, proof?.second)
+                val proof = if (done) loadProof(id, date) else null
+                Loaded(tugas, date, url, done, proof?.first, proof?.second)
             }.onSuccess { loaded ->
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         tugas = loaded.tugas,
                         mediaUrl = loaded.mediaUrl,
-                        occurrenceDate = occurrenceDate,
+                        // The resolved date, not the parameter: on the notification path the
+                        // parameter is null and this is the only thing that knows the answer. The
+                        // screen already prints it back ("Jadwal ..."), which is what tells a
+                        // parent which day they landed on.
+                        occurrenceDate = loaded.date,
                         alreadyDone = loaded.done,
                         submittedProof = loaded.proof,
                         submittedProofUrl = loaded.proofUrl,
                     )
                 }
             }.onFailure { e ->
-                _uiState.update { it.copy(isLoading = false, loadError = e.message ?: "Gagal memuat tugas") }
+                _uiState.update { it.copy(isLoading = false, loadError = ErrorText.of(e, "Gagal memuat tugas")) }
             }
         }
     }
@@ -111,6 +129,7 @@ class TaskDetailViewModel(
     /** Bundles what one load produced; a Triple stopped being readable at five values. */
     private data class Loaded(
         val tugas: Task,
+        val date: LocalDate,
         val mediaUrl: String?,
         val done: Boolean,
         val proof: Documentation?,
@@ -139,6 +158,14 @@ class TaskDetailViewModel(
     fun onDurationChange(d: WorkDuration) = _uiState.update { it.copy(duration = d) }
     fun onCatatanChange(v: String) = _uiState.update { it.copy(catatan = v) }
 
+    /**
+     * Accepts a proof from either source, gallery or camera.
+     *
+     * The camera path reaches here as a FileProvider URI whose MIME is resolved from the file
+     * SUFFIX -- `CameraUriManager` creates `.jpg`, which resolves to `image/jpeg` and so passes the
+     * whitelist below. Those two facts are coupled and neither file says so on its own: change the
+     * suffix there and every camera capture starts failing here with "Format tidak didukung".
+     */
     fun onProofPicked(uri: Uri) {
         val mime = ServiceLocator.appContext.contentResolver.getType(uri)
         val (kind, ext) = when (mime) {
@@ -173,16 +200,48 @@ class TaskDetailViewModel(
         // impossible to count or chart.
         val note = s.catatan.trim().ifBlank { null }
 
+        // Asked before the attempt, not after it. Without this the user waits out a connection
+        // timeout to be told something the phone already knew -- and here they burn upload data
+        // getting there. A false positive is possible (see Connectivity), so the mapped error on
+        // the way back still has the last word.
+        if (!Connectivity.isOnline(ServiceLocator.appContext)) {
+            _uiState.update { it.copy(submitError = ErrorText.OFFLINE) }
+            return
+        }
+
         viewModelScope.launch {
             _uiState.update { it.copy(isSubmitting = true, submitError = null) }
             try {
-                val bytes = withContext(Dispatchers.IO) {
-                    ServiceLocator.appContext.contentResolver
-                        .openInputStream(Uri.parse(s.proofUri))
-                        ?.use { it.readBytes() }
-                } ?: throw IllegalStateException("Gagal membaca file bukti.")
+                // Compressed, not raw. This path uploaded whatever the user picked at full size,
+                // which survived only because a gallery pick is usually already small. A camera
+                // photo is 3-8 MB, and this app's stated constraint is 200 KB -- paid for out of a
+                // low-income family's data. Adding capture without this would be a bandwidth
+                // regression wearing a feature's clothes.
+                //
+                // Images only: compressToJpeg re-encodes as JPEG, which would corrupt a video.
+                // Video proof therefore still uploads raw -- recorded as debt, and not reachable
+                // from the camera, which only takes photos.
+                val isImage = s.proofKind == MediaKind.IMAGE
+                val bytes = if (isImage) {
+                    ImageCompressor.compressToJpeg(ServiceLocator.appContext, Uri.parse(s.proofUri))
+                } else {
+                    withContext(Dispatchers.IO) {
+                        ServiceLocator.appContext.contentResolver
+                            .openInputStream(Uri.parse(s.proofUri))
+                            ?.use { it.readBytes() }
+                    } ?: throw IllegalStateException("Gagal membaca file bukti.")
+                }
 
-                val path = taskRepository.uploadDocumentation(tugas.anakId, bytes, proofExt!!)
+                // Last guard before the bucket's own limit rejects it with a raw error, matching
+                // what CreatePresensiViewModel already does.
+                if (bytes.size > ImageCompressor.MAX_UPLOAD_BYTES) {
+                    throw IllegalStateException("Bukti terlalu besar untuk diunggah. Coba file lain.")
+                }
+
+                // The compressor always emits JPEG, so a picked .webp would otherwise be stored
+                // under a name that lies about its contents.
+                val ext = if (isImage) "jpg" else proofExt!!
+                val path = taskRepository.uploadDocumentation(tugas.anakId, bytes, ext)
 
                 val dokumentasiId = taskRepository.createDocumentation(
                     DocumentationInsert(
@@ -208,12 +267,22 @@ class TaskDetailViewModel(
                 )
                 _uiState.update { it.copy(isSubmitting = false, isSuccess = true) }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isSubmitting = false, submitError = e.message ?: "Gagal mengirim bukti") }
+                _uiState.update { it.copy(isSubmitting = false, submitError = ErrorText.of(e, "Gagal mengirim bukti")) }
             }
         }
     }
 
     companion object {
+        /**
+         * Shown when a notification points at a task whose rule yields no occurrence at all.
+         *
+         * Reachable only from the dateless path, and phrased as a statement rather than a failure
+         * because it is one: the programme really has nothing to open. The screen's error pane is
+         * the right home for it -- there is no content behind it to preserve, so this is not
+         * banner territory -- though retrying it will always produce the same answer.
+         */
+        const val NO_OCCURRENCE = "Tugas ini tidak punya jadwal yang bisa dibuka."
+
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 TaskDetailViewModel(

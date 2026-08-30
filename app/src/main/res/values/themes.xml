@@ -1,5 +1,54 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.Sipatokkong" parent="android:Theme.Material.Light.NoActionBar" />
+    <!--
+        The launcher's theme, and therefore the first second of this app — decided here, not in
+        Compose.
+
+        This file used to be one empty style. On Android 12+ that still produced a system splash
+        improvised from android:icon, but on 8.1 through 11 — every device below 12, and minSdk is
+        27 — there is no system splash at all: a blank window in whatever windowBackground the
+        platform happened to default to, and then a bare CircularProgressIndicator. That is what
+        "on some phones no logo, just buffering" was, and the phones were the pre-12 ones.
+
+        androidx.core:core-splashscreen paints the same splash from API 23 up, so both halves of the
+        install base finally see one thing.
+    -->
+    <style name="Theme.Sipatokkong.Splash" parent="Theme.SplashScreen">
+
+        <!--
+            BrandTealDeep, the same #1E4C57 as ic_launcher_background, so the launcher tile and the
+            splash field are one continuous colour and the mark appears to grow out of the icon
+            that was tapped.
+
+            Not AppBackground: the orange stroke measures 2.05:1 against it, which
+            ic_launcher_background.xml already documents as a smudge rather than a shape.
+        -->
+        <item name="windowSplashScreenBackground">@color/brand_teal_deep</item>
+
+        <!--
+            The FOREGROUND vector, not @mipmap/ic_launcher. The adaptive icon carries its own
+            #1E4C57 tile; API 31+ masks that tile to a circle and the pre-31 backport does not mask
+            at all, so the same asset would draw a circle on new phones and a hard-edged square on
+            exactly the old ones this fix is for. A transparent-background foreground looks
+            identical either way — and its own header comment certifies the artwork sits at
+            x 27..79, y 25..84 of the 108 viewport, inside the 66dp safe zone, so the 31+ circular
+            mask clips none of it.
+        -->
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+
+        <!-- Dark field, so status-bar icons must be light. The platform handles this on 31+; this
+             is for the backport. -->
+        <item name="android:windowLightStatusBar">false</item>
+
+        <!-- Swapped in by installSplashScreen() the moment the splash is dismissed. -->
+        <item name="postSplashScreenTheme">@style/Theme.Sipatokkong</item>
+    </style>
+
+    <style name="Theme.Sipatokkong" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- Was unset, so the window behind Compose was whatever the platform default happened to
+             be on that OEM. Pinned to AppBackground so the hand-off from the splash lands on the
+             app's own colour rather than a third one. -->
+        <item name="android:windowBackground">@color/app_background</item>
+    </style>
 </resources>

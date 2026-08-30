@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.core.media.ImageCompressor
 import com.antoniusindra.sipatokkong.data.model.ChildOption
 import com.antoniusindra.sipatokkong.data.model.PresensiInsert
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import com.antoniusindra.sipatokkong.core.net.Connectivity
 
 data class CreatePresensiUiState(
     val children: List<ChildOption> = emptyList(),
@@ -79,7 +81,7 @@ class CreatePresensiViewModel(
                 }
                 .onFailure { e ->
                     _uiState.update {
-                        it.copy(isLoadingChildren = false, error = e.message ?: "Gagal memuat daftar anak")
+                        it.copy(isLoadingChildren = false, error = ErrorText.of(e, "Gagal memuat daftar anak"))
                     }
                 }
         }
@@ -111,6 +113,14 @@ class CreatePresensiViewModel(
             relawanId == null -> return fail("Sesi tidak valid. Silakan login ulang.")
         }
 
+        // Asked before the attempt, not after it. Without this the user waits out a connection
+        // timeout to be told something the phone already knew -- and here they burn upload data
+        // getting there. A false positive is possible (see Connectivity), so the mapped error on
+        // the way back still has the last word.
+        if (!Connectivity.isOnline(ServiceLocator.appContext)) {
+            return fail(ErrorText.OFFLINE)
+        }
+
         viewModelScope.launch {
             _uiState.update { it.copy(isSubmitting = true, error = null) }
             try {
@@ -136,7 +146,7 @@ class CreatePresensiViewModel(
                 )
                 _uiState.update { it.copy(isSubmitting = false, isSuccess = true) }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isSubmitting = false, error = messageFor(e)) }
+                _uiState.update { it.copy(isSubmitting = false, error = ErrorText.of(e, "Gagal menyimpan presensi")) }
             }
         }
     }
@@ -147,17 +157,6 @@ class CreatePresensiViewModel(
      * `presensi_unik_harian` raises Postgres 23505, which arrives as a Postgrest error mentioning
      * the index name — unreadable, and it looks like a crash rather than "you already did this".
      */
-    private fun messageFor(e: Exception): String {
-        val raw = e.message.orEmpty()
-        return when {
-            raw.contains("presensi_unik_harian") || raw.contains("23505") ->
-                "Kunjungan untuk anak ini pada tanggal tersebut sudah dicatat."
-
-            raw.isNotBlank() -> raw
-            else -> "Gagal menyimpan presensi"
-        }
-    }
-
     private fun fail(message: String) = _uiState.update { it.copy(error = message) }
 
     companion object {
