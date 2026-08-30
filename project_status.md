@@ -302,6 +302,20 @@ child so `is_parent_of` admits their parent.
 
 ## Change Log
 
+### [2026-08-30] - The Cancel Button Was in the Wrong Half of the Dialog
+* **Reported from the device:** in the proof-source chooser, "Batal" was in the wrong place.
+* **AlertDialog lays `confirmButton` and `dismissButton` out side by side on one row.** I put the two
+    real choices in `confirmButton` as a full-width `Column` and left "Batal" in `dismissButton` --
+    so the column took the whole row and squeezed the cancel in beside it.
+* **All three now live in `confirmButton`, stacked full width in reading order**, with "Batal" last
+    and visually quietest as a `TextButton`. `dismissButton` is left unset deliberately, and the
+    comment says why, so the next person does not helpfully move it back.
+* **Verified by screenshot this time, not by reasoning -- I had already got this dialog wrong once.**
+    The composable sits behind a parent login the emulator does not have, so it was rendered through
+    a throwaway probe on a screen that was reachable, photographed, and the probe removed. Confirmed
+    afterwards that no probe survives and the composable is `private` again.
+* **Verified:** 361 tests still green, zero warnings.
+
 ### [2026-08-30] - Asking Whether There Is Signal Before Spending a Wait On It
 * **`ACCESS_NETWORK_STATE` had been declared in the manifest since the first commit and never read.**
     `core/net/Connectivity.kt` is the first thing to read it.

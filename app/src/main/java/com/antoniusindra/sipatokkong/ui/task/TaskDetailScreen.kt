@@ -556,6 +556,13 @@ private fun ProofSourceDialog(
         onDismissRequest = onDismiss,
         title = { Text("Kirim bukti dari mana?", fontWeight = FontWeight.Bold) },
         text = { Text("Ambil foto sekarang, atau pilih file yang sudah ada di HP Anda.") },
+        // All three in confirmButton, and dismissButton left unset on purpose. AlertDialog lays the
+        // two slots out side by side on one row, so a full-width Column in one of them squeezes
+        // whatever is in the other -- which is exactly what "Batal" did on the first attempt.
+        //
+        // Stacked full width instead, in reading order, with Batal last and visually quietest. For
+        // this audience three labelled targets down the screen beat two side by side, where the
+        // narrower one is easy to mistake for the answer.
         confirmButton = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -571,9 +578,11 @@ private fun ProofSourceDialog(
                     Spacer(Modifier.size(8.dp))
                     Text("Pilih dari Galeri")
                 }
+                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+                    Text("Batal")
+                }
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } },
     )
 }
 
