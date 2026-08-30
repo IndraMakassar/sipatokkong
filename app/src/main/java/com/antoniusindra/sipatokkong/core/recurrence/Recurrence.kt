@@ -72,6 +72,47 @@ data class RecurrenceRule(
     }
 
     /**
+     * The single occurrence a link carrying no date should open: the next one on or after [today],
+     * and failing that the most recent one before it.
+     *
+     * Exists because a notification row carries only `entity_id`. `notifications` has no date
+     * column and cannot gain one usefully -- a `tugas_baru` row is written when the programme is
+     * created, which is rarely the day any of its occurrences fall on.
+     *
+     * Lives on the rule rather than beside `TaskOccurrences` because the answer depends on
+     * [effectiveEnd], which is private and encodes the `stoppedOn - 1` exclusivity. A helper
+     * outside this class would have to re-derive that and would drift from it.
+     *
+     * Deliberately does **not** reuse the parent home's `PAST_WINDOW_DAYS` / `FUTURE_WINDOW_DAYS`.
+     * Those bound what a *list* draws; a programme starting in three weeks is off that list while
+     * being exactly the thing the notification announced.
+     *
+     * Returns null only when this rule can produce no occurrence at all in reach: a weekly rule
+     * with no chosen days, a monthly one with no day of month, an interval with no step, an end
+     * before the start, or a programme starting beyond the probe. The caller shows an error rather
+     * than inventing a date.
+     */
+    fun occurrenceNearest(today: LocalDate, probeDays: Long = NEAREST_PROBE_DAYS): LocalDate? {
+        // ONCE has exactly one candidate and it *is* the task, however old. No probe window may be
+        // allowed to hide it: a one-shot task filed two years ago must still open. Asking
+        // occurrencesBetween for that single day keeps the endsOn/stoppedOn clamp applied here too.
+        if (type == RecurrenceType.ONCE) return occurrencesBetween(startsOn, startsOn).firstOrNull()
+
+        // The past side is anchored on the rule's own end rather than on today, so a programme that
+        // finished long ago resolves to its final date instead of falling off the back of the probe.
+        val pastAnchor = effectiveEnd?.let { minOf(today, it) } ?: today
+        val from = maxOf(startsOn, pastAnchor.minusDays(probeDays))
+        val to = today.plusDays(probeDays)
+
+        // One call, and deliberately not a hand-rolled "walk forward until you find one". Every
+        // cadence's arithmetic -- the interval anchoring, the short-month clamp, both range bounds
+        // -- already lives in occurrencesBetween and is already tested. Materialising a couple of
+        // thousand LocalDates once, on a notification tap, is the cheaper mistake to make.
+        val dates = occurrencesBetween(from, to)
+        return dates.firstOrNull { it >= today } ?: dates.lastOrNull()
+    }
+
+    /**
      * Every occurrence date in `[from, to]` (both inclusive), ascending.
      *
      * Returns an empty list when the window falls entirely outside the rule's active range.
@@ -159,4 +200,17 @@ data class RecurrenceRule(
         RecurrenceType.MONTHLY -> "Setiap tanggal ${dayOfMonth ?: "-"}"
         RecurrenceType.INTERVAL -> "Tiap ${intervalDays ?: "-"} hari"
     }
+
+    companion object {
+        /**
+         * How far either side [occurrenceNearest] looks, in days.
+         *
+         * 1000 because `CreateTaskViewModel.onIntervalChange` caps the interval field with
+         * `take(3)`, so 999 days is the widest gap between two occurrences this app can create;
+         * monthly is at most 31 and weekly at most 7. One probe of this size therefore cannot step
+         * over an occurrence of any programme the form can produce.
+         */
+        const val NEAREST_PROBE_DAYS = 1_000L
+    }
+
 }

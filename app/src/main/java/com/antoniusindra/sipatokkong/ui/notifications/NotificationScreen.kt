@@ -83,8 +83,8 @@ private val NoteTint = Color(0xFF2E6E4E)
  * One screen for both, because nothing here needs to know the role: `notif_select` is
  * `recipient_id = auth.uid()`, so the repository already returns exactly the rows this user owns,
  * and the card is drawn from `type` and `entity_table` on the row itself. Tapping a row marks it
- * read; a feedback notification also opens its thread, while a task notification does not navigate —
- * see [NotifDisplay.targetOf] for why there is no honest destination for one.
+ * read and opens what it points at — a feedback thread or a task — via [NotifDisplay.targetOf],
+ * which is the single place that decides destinations for both this screen and the push tray.
  *
  * The one thing that does differ by role is the empty-state line; it is a parameter, not a branch.
  */
@@ -93,6 +93,11 @@ private val NoteTint = Color(0xFF2E6E4E)
 fun NotificationScreen(
     onBack: () -> Unit,
     onOpenFeedbackThread: (String) -> Unit = {},
+    /**
+     * Opens a task by id alone. No date: a notification has never carried one, and the destination
+     * resolves it from the task's own recurrence rule. See [NotifDisplay.targetOf].
+     */
+    onOpenTask: (String) -> Unit = {},
     /**
      * The line under "Belum ada notifikasi". Parent-voiced by default, because the parent is the
      * only role that receives more than one kind: `on_tugas_insert` and `on_balasan_insert` both
@@ -116,6 +121,7 @@ fun NotificationScreen(
         viewModel.markRead(notif.id)
         when (val target = notif.target) {
             is NotifTarget.FeedbackThread -> onOpenFeedbackThread(target.feedbackId)
+            is NotifTarget.TaskDetail -> onOpenTask(target.tugasId)
             NotifTarget.None -> Unit
         }
     }
@@ -261,9 +267,13 @@ private fun NotificationCard(
     onClick: () -> Unit,
 ) {
     val (icon, boxBg, tint) = iconFor(notif.type)
-    // A read task notification does nothing at all when tapped, so it gets no ripple either —
-    // better to read as "not tappable" than to promise something and deliver nothing.
-    val isActionable = !notif.isRead || notif.target is NotifTarget.FeedbackThread
+    // A row that neither marks anything nor navigates gets no ripple either — better to read as
+    // "not tappable" than to promise something and deliver nothing.
+    //
+    // Written against None rather than listing the destinations. As `is FeedbackThread` this
+    // compiled untouched when TaskDetail was added and produced the nastiest kind of bug: unread
+    // task rows navigated, read ones were `clickable(enabled = false)` and silently did nothing.
+    val isActionable = !notif.isRead || notif.target !is NotifTarget.None
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -361,7 +371,10 @@ private fun NotificationCardPreview() {
                     body = "Latihan Sensori — Ajak anak menyentuh tekstur kain selama dua menit.",
                     createdAt = LocalDate.now().toString(),
                     isRead = false,
-                    target = NotifTarget.None,
+                    // A real tugas_baru row deep-links now. Left as None this preview would show a
+                    // card that renders correctly and is not tappable, which is the one thing about
+                    // it a reviewer cannot see from a screenshot.
+                    target = NotifTarget.TaskDetail("t-1"),
                 ),
                 today = LocalDate.now(),
             ) {}

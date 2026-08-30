@@ -219,7 +219,7 @@ fun SipatokkongMain(
                             },
                             onOpenNotifications = { navController.navigate("parent_notifications") },
                             onOpenTask = { id, date ->
-                                navController.navigate("tugas_detail/$id/$date")
+                                navController.navigate("tugas_detail/$id?occurrenceDate=$date")
                             },
                             onOpenFeedbackThread = { id -> navController.navigate("feedback_thread/$id") },
                             onComposeFeedback = { navController.navigate("create_feedback") },
@@ -238,6 +238,7 @@ fun SipatokkongMain(
                     NotificationScreen(
                         onBack = { navController.popBackStack() },
                         onOpenFeedbackThread = { id -> navController.navigate("feedback_thread/$id") },
+                        onOpenTask = { id -> navController.navigate("tugas_detail/$id") },
                     )
                 }
                 composable("parent_history") {
@@ -251,16 +252,36 @@ fun SipatokkongMain(
                             today = parentState.today,
                             onBack = { navController.popBackStack() },
                             onOpenTask = { id, date ->
-                                navController.navigate("tugas_detail/$id/$date")
+                                navController.navigate("tugas_detail/$id?occurrenceDate=$date")
                             }
                         )
                     }
                 }
-                composable("tugas_detail/{tugasId}/{occurrenceDate}") { backStackEntry ->
+                // `occurrenceDate` is optional, following the same idiom as create_program_ajar
+                // below, and for the same kind of reason: one destination has to match two callers
+                // that know different amounts. A screen or history row navigates here off a
+                // rendered TaskOccurrence and has a date in hand; a notification tap has only the
+                // task id, because `notifications` has no date column and a push cannot look one
+                // up (see PushPayload.routeFor). Rather than two routes that could drift, the
+                // screen accepts null and resolves a date from the task's own recurrence rule.
+                composable(
+                    route = "tugas_detail/{tugasId}?occurrenceDate={occurrenceDate}",
+                    arguments = listOf(
+                        navArgument("tugasId") { type = NavType.StringType },
+                        navArgument("occurrenceDate") {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = null
+                        },
+                    ),
+                ) { backStackEntry ->
                     val id = backStackEntry.arguments?.getString("tugasId")
+                    // Null on the notification path by design, and an unparseable value is treated
+                    // the same rather than rendering nothing -- which is what the old two-segment
+                    // route did, leaving a blank screen with no explanation.
                     val date = backStackEntry.arguments?.getString("occurrenceDate")
                         ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-                    if (id != null && date != null) {
+                    if (id != null) {
                         TaskDetailScreen(
                             tugasId = id,
                             occurrenceDate = date,
@@ -364,6 +385,10 @@ fun SipatokkongMain(
                     NotificationScreen(
                         onBack = { navController.popBackStack() },
                         onOpenFeedbackThread = { id -> navController.navigate("feedback_thread/$id") },
+                        // No onOpenTask, and not an oversight: on_tugas_insert writes the row to
+                        // the child's `orangtua_id`, so no volunteer can hold a `tugas`
+                        // notification. Wiring one would point a volunteer at a parent-only screen.
+                        //
                         // Only feedback_baru ever reaches a relawan, so name that and nothing else.
                         emptyText = "Catatan baru dari orang tua akan muncul di sini.",
                     )

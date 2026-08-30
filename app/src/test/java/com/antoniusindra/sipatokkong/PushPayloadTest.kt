@@ -136,9 +136,16 @@ class PushPayloadTest {
     }
 
     @Test
-    fun `a task push opens nothing`() {
-        // Not an oversight: tugas_detail needs an occurrence date the notification has never
-        // carried, and a recurring program has dozens with no single right answer.
+    fun `a task push opens the task, with no date in the route`() {
+        // This used to assert null. The literal route string is asserted rather than just
+        // "non-null" on purpose: it is the only thing tying routeFor to the destination declared in
+        // SipatokkongMain. Route strings are not type-checked, so renaming the destination without
+        // this test would surface as a runtime "navigation destination is unknown" on a real tap,
+        // in the one flow nobody exercises by hand.
+        //
+        // No `?occurrenceDate=` either, and that is the constraint the whole design turns on: this
+        // function runs inside SipatokkongMessagingService building a PendingIntent, where a
+        // suspend getTask() is impossible. The date is resolved by the screen instead.
         val data = push(
             "notification_id" to "n-2",
             "type" to "tugas_baru",
@@ -146,6 +153,14 @@ class PushPayloadTest {
             "entity_table" to "tugas",
             "entity_id" to "t-1",
         )
+        val route = PushPayload.routeFor(PushPayload.parse(data))
+        assertEquals("tugas_detail/t-1", route)
+        assertFalse(route!!.contains("?"))
+    }
+
+    @Test
+    fun `a task push with no entity id opens nothing`() {
+        val data = push("type" to "tugas_baru", "entity_table" to "tugas", "entity_id" to "")
         assertNull(PushPayload.routeFor(PushPayload.parse(data)))
     }
 
@@ -179,6 +194,7 @@ class PushPayloadTest {
             "feedback" to "fb-1",
             "feedback" to "",
             "tugas" to "t-1",
+            "tugas" to "",
             "dokumentasi" to "d-1",
             "" to "x",
         )
@@ -189,7 +205,9 @@ class PushPayloadTest {
                 put("entity_id", id)
             }
             val routes = PushPayload.routeFor(PushPayload.parse(data)) != null
-            val deepLinks = NotifDisplay.targetOf(table, id) is NotifTarget.FeedbackThread
+            // Written against None rather than listing the destinations, so adding a third target
+            // extends this invariant automatically instead of quietly narrowing it.
+            val deepLinks = NotifDisplay.targetOf(table, id) !is NotifTarget.None
             assertEquals("$table/$id", deepLinks, routes)
         }
     }
@@ -208,6 +226,16 @@ class PushPayloadTest {
     fun `two different rows do not collide`() {
         val a = PushPayload.parse(feedbackPush() + ("notification_id" to "8f14e45f-ea1e-4a1b-9c2d-000000000001"))
         val b = PushPayload.parse(feedbackPush() + ("notification_id" to "8f14e45f-ea1e-4a1b-9c2d-000000000002"))
+        assertNotEquals(PushPayload.notificationIdFor(a), PushPayload.notificationIdFor(b))
+    }
+
+    @Test
+    fun `two task pushes with no notification id do not collide`() {
+        // The fallback seed used to be read with `as? NotifTarget.FeedbackThread`, which silently
+        // skipped task rows: both fell through to FALLBACK_TRAY_ID and the second push replaced
+        // the first in the tray. A parent would be told about one new task and never the other.
+        val a = PushPayload.parse(push("type" to "tugas_baru", "entity_table" to "tugas", "entity_id" to "t-1"))
+        val b = PushPayload.parse(push("type" to "tugas_baru", "entity_table" to "tugas", "entity_id" to "t-2"))
         assertNotEquals(PushPayload.notificationIdFor(a), PushPayload.notificationIdFor(b))
     }
 

@@ -181,10 +181,18 @@ class NotificationViewModel(
             state.copy(items = state.items.map { if (it.id == id) it.copy(isRead = true) else it })
         }
 
-        // Same lifetime split as markAllRead, for the same reason. This one survived by accident:
-        // tapping a feedback card navigates *forward*, so the screen stays on the back stack and
-        // the request completes. A task notification navigates nowhere, so a quick Back cancels it
-        // exactly as it did the sweep.
+        // Same lifetime split as markAllRead, for the same reason.
+        //
+        // The justification used to run: this one survived by accident, because tapping a feedback
+        // card navigates forward and leaves the screen on the back stack, while a task
+        // notification navigated nowhere and so lost its write to a quick Back. That is now
+        // backwards -- every deep-linkable row navigates forward, so nothing is left relying on
+        // the accident.
+        //
+        // The split stays anyway, and is worth more than when it was added. A row whose target is
+        // None still does not navigate, and Back from any destination pops this screen and cancels
+        // viewModelScope regardless of how the write got started. "It happens to survive today" is
+        // exactly the reasoning that let the sweep ship broken.
         val repo = notificationRepository
         val write = ServiceLocator.appScope.async {
             runCatching { repo.markRead(id) }

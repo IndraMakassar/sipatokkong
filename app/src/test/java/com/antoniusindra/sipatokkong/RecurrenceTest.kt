@@ -4,6 +4,7 @@ import com.antoniusindra.sipatokkong.core.recurrence.RecurrenceRule
 import com.antoniusindra.sipatokkong.core.recurrence.RecurrenceType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.DayOfWeek
@@ -205,5 +206,150 @@ class RecurrenceTest {
             daysOfWeek = setOf(DayOfWeek.THURSDAY, DayOfWeek.MONDAY),
         )
         assertEquals("Setiap Senin, Kamis", rule.describe())
+    }
+
+    // ---- the occurrence a dateless link opens ----
+    //
+    // A notification carries entity_id and nothing else, so tapping one has to resolve a date from
+    // the rule alone. These pin the two halves of that: "next on or after today", and the fallback
+    // to the most recent past one so a finished programme still opens something.
+
+    @Test
+    fun `today wins over yesterday and over tomorrow`() {
+        // The off-by-one at the heart of "on or after". A daily rule has all three available.
+        val today = d("2026-03-10")
+        val rule = RecurrenceRule(RecurrenceType.DAILY, startsOn = d("2026-01-01"))
+        assertEquals(today, rule.occurrenceNearest(today))
+    }
+
+    @Test
+    fun `a weekly program opens the next chosen day, not the last one`() {
+        // Monday and Thursday; today is a Tuesday, so the answer is Thursday and not the Monday
+        // that has just passed.
+        val rule = RecurrenceRule(
+            RecurrenceType.WEEKLY,
+            startsOn = d("2026-01-01"),
+            daysOfWeek = setOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY),
+        )
+        val tuesday = d("2026-03-10")
+        assertEquals(DayOfWeek.TUESDAY, tuesday.dayOfWeek)
+        assertEquals(d("2026-03-12"), rule.occurrenceNearest(tuesday))
+    }
+
+    @Test
+    fun `a program starting past the home screen's window still resolves`() {
+        // ParentHomeViewModel draws 14 days ahead. A programme starting in 40 is off that list and
+        // is exactly what a `tugas_baru` notification announces, so this must not reuse that bound.
+        val today = d("2026-03-10")
+        val rule = RecurrenceRule(RecurrenceType.DAILY, startsOn = today.plusDays(40))
+        assertEquals(today.plusDays(40), rule.occurrenceNearest(today))
+    }
+
+    @Test
+    fun `a finished program opens its last day`() {
+        // 40 days back, past the home screen's 30-day history window. The past side is anchored on
+        // the rule's own end rather than on today, which is what makes this resolve.
+        val today = d("2026-03-10")
+        val rule = RecurrenceRule(
+            RecurrenceType.DAILY,
+            startsOn = d("2025-01-01"),
+            endsOn = today.minusDays(40),
+        )
+        assertEquals(today.minusDays(40), rule.occurrenceNearest(today))
+    }
+
+    @Test
+    fun `a program that ended further back than the probe still opens its last day`() {
+        // 1500 days, deliberately WIDER than NEAREST_PROBE_DAYS. A window anchored on today reaches
+        // back only 1000 and finds nothing at all, so this is the one case that actually demands
+        // the past side be anchored on the rule's own end. Verified by making that change and
+        // watching this fail -- at 400 days it passed either way, which is why it says 1500.
+        val today = d("2026-03-10")
+        val rule = RecurrenceRule(
+            RecurrenceType.DAILY,
+            startsOn = d("2018-01-01"),
+            endsOn = today.minusDays(1_500),
+        )
+        assertEquals(today.minusDays(1_500), rule.occurrenceNearest(today))
+    }
+
+    @Test
+    fun `a stopped program opens the day before it was stopped`() {
+        // stoppedOn is exclusive, so stopping a daily programme today leaves yesterday as its last
+        // real occurrence. Reached through this path rather than special-cased in it.
+        val today = d("2026-03-10")
+        val rule = RecurrenceRule(
+            RecurrenceType.DAILY,
+            startsOn = d("2026-01-01"),
+            stoppedOn = today,
+        )
+        assertEquals(today.minusDays(1), rule.occurrenceNearest(today))
+    }
+
+    @Test
+    fun `a once task in the past opens its own date however old`() {
+        // The reason ONCE has its own branch: 800 days is inside the probe, but the branch exists
+        // so that no probe width can ever hide a one-shot task from the parent it was assigned to.
+        val today = d("2026-03-10")
+        val rule = RecurrenceRule(RecurrenceType.ONCE, startsOn = today.minusDays(800))
+        assertEquals(today.minusDays(800), rule.occurrenceNearest(today))
+        val ancient = RecurrenceRule(RecurrenceType.ONCE, startsOn = today.minusDays(5_000))
+        assertEquals(today.minusDays(5_000), ancient.occurrenceNearest(today))
+    }
+
+    @Test
+    fun `a once task scheduled ahead opens its own date`() {
+        val today = d("2026-03-10")
+        val rule = RecurrenceRule(RecurrenceType.ONCE, startsOn = today.plusDays(5))
+        assertEquals(today.plusDays(5), rule.occurrenceNearest(today))
+    }
+
+    @Test
+    fun `a monthly program clamps into a short month`() {
+        // Day 31 in February. The clamp lives in monthlyOccurrences and this proves it survives
+        // the dateless path rather than being bypassed by it.
+        val rule = RecurrenceRule(
+            RecurrenceType.MONTHLY,
+            startsOn = d("2026-01-31"),
+            dayOfMonth = 31,
+        )
+        assertEquals(d("2026-02-28"), rule.occurrenceNearest(d("2026-02-01")))
+    }
+
+    @Test
+    fun `the widest interval the form can produce still resolves`() {
+        // CreateTaskViewModel caps the interval field at three digits, so 999 is the largest gap
+        // between two occurrences this app can create. Lower NEAREST_PROBE_DAYS and this fails.
+        val today = d("2026-03-10")
+        val rule = RecurrenceRule(
+            RecurrenceType.INTERVAL,
+            startsOn = today.minusDays(1),
+            intervalDays = 999,
+        )
+        assertEquals(today.plusDays(998), rule.occurrenceNearest(today))
+    }
+
+    @Test
+    fun `a rule that can produce nothing opens nothing`() {
+        val today = d("2026-03-10")
+        // Each of these is a rule the UI can leave half-filled; none may invent a date.
+        assertNull(RecurrenceRule(RecurrenceType.WEEKLY, startsOn = today).occurrenceNearest(today))
+        assertNull(RecurrenceRule(RecurrenceType.MONTHLY, startsOn = today).occurrenceNearest(today))
+        assertNull(RecurrenceRule(RecurrenceType.INTERVAL, startsOn = today).occurrenceNearest(today))
+        assertNull(
+            RecurrenceRule(RecurrenceType.INTERVAL, startsOn = today, intervalDays = 0)
+                .occurrenceNearest(today),
+        )
+        assertNull(
+            RecurrenceRule(RecurrenceType.DAILY, startsOn = today, endsOn = today.minusDays(1))
+                .occurrenceNearest(today),
+        )
+    }
+
+    @Test
+    fun `a program starting beyond the probe opens nothing rather than guessing`() {
+        val today = d("2026-03-10")
+        val rule = RecurrenceRule(RecurrenceType.DAILY, startsOn = today.plusDays(2_000))
+        assertNull(rule.occurrenceNearest(today))
     }
 }

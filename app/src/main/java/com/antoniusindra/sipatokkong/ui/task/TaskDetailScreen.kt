@@ -75,7 +75,11 @@ private val DetailDateFormat =
 @Composable
 fun TaskDetailScreen(
     tugasId: String,
-    occurrenceDate: LocalDate,
+    /**
+     * The day to open, or null when the caller has none -- a notification tap, which carries only
+     * the task id. The ViewModel then resolves one from the task's recurrence rule.
+     */
+    occurrenceDate: LocalDate?,
     onBack: () -> Unit,
     viewModel: TaskDetailViewModel = viewModel(factory = TaskDetailViewModel.Factory),
 ) {

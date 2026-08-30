@@ -74,29 +74,44 @@ class TaskDetailViewModel(
     fun proofRef(): MediaRef? =
         _uiState.value.submittedProof?.let { MediaRef(MediaBucket.DOKUMENTASI, it.mediaPath) }
 
-    fun load(id: String, occurrenceDate: LocalDate) {
+    /**
+     * @param occurrenceDate the day being worked on, or null when the caller has none.
+     *
+     * Null arrives from a notification tap: `notifications` has no date column, so the route
+     * declares that argument optional. Resolving it here is free -- the recurrence rule needed to
+     * answer it lives on the `Task` this function fetches on its first line anyway, so the
+     * notification path costs exactly the same round trips as the ordinary one.
+     */
+    fun load(id: String, occurrenceDate: LocalDate?) {
         if (loaded) return
         loaded = true
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, loadError = null) }
             runCatching {
                 val tugas = taskRepository.getTask(id) ?: error("Tugas tidak ditemukan.")
+                val date = occurrenceDate
+                    ?: tugas.toRecurrenceRule().occurrenceNearest(LocalDate.now())
+                    ?: error(NO_OCCURRENCE)
                 val url = runCatching { taskRepository.signedDemoUrl(tugas.mediaPath) }.getOrNull()
                 // Completion is per date, so a recurring program stays open on other days.
                 val done = TaskOccurrences.isDone(
                     completions = taskRepository.completionsForCurrentUser(),
                     taskId = id,
-                    date = occurrenceDate,
+                    date = date,
                 )
-                val proof = if (done) loadProof(id, occurrenceDate) else null
-                Loaded(tugas, url, done, proof?.first, proof?.second)
+                val proof = if (done) loadProof(id, date) else null
+                Loaded(tugas, date, url, done, proof?.first, proof?.second)
             }.onSuccess { loaded ->
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         tugas = loaded.tugas,
                         mediaUrl = loaded.mediaUrl,
-                        occurrenceDate = occurrenceDate,
+                        // The resolved date, not the parameter: on the notification path the
+                        // parameter is null and this is the only thing that knows the answer. The
+                        // screen already prints it back ("Jadwal ..."), which is what tells a
+                        // parent which day they landed on.
+                        occurrenceDate = loaded.date,
                         alreadyDone = loaded.done,
                         submittedProof = loaded.proof,
                         submittedProofUrl = loaded.proofUrl,
@@ -111,6 +126,7 @@ class TaskDetailViewModel(
     /** Bundles what one load produced; a Triple stopped being readable at five values. */
     private data class Loaded(
         val tugas: Task,
+        val date: LocalDate,
         val mediaUrl: String?,
         val done: Boolean,
         val proof: Documentation?,
@@ -214,6 +230,16 @@ class TaskDetailViewModel(
     }
 
     companion object {
+        /**
+         * Shown when a notification points at a task whose rule yields no occurrence at all.
+         *
+         * Reachable only from the dateless path, and phrased as a statement rather than a failure
+         * because it is one: the programme really has nothing to open. The screen's error pane is
+         * the right home for it -- there is no content behind it to preserve, so this is not
+         * banner territory -- though retrying it will always produce the same answer.
+         */
+        const val NO_OCCURRENCE = "Tugas ini tidak punya jadwal yang bisa dibuka."
+
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 TaskDetailViewModel(

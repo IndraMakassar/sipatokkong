@@ -78,12 +78,18 @@ object PushPayload {
      * The nav route a tap should open, or null when there is nowhere honest to go.
      *
      * The push carries `entity_table`/`entity_id`, never a route string, so [NotifDisplay.targetOf]
-     * decides this and a future destination is added in one place rather than two. A task push opens
-     * nothing for the same reason its card does not: `tugas_detail` needs an occurrence date the
-     * notification has never carried.
+     * decides this and a future destination is added in one place rather than two.
+     *
+     * The task route carries no date, and this is the function that could not supply one even if it
+     * wanted to: it runs inside `SipatokkongMessagingService` while building a `PendingIntent`, and
+     * a suspend `getTask()` is not available there. That constraint is why `tugas_detail` declares
+     * `occurrenceDate` optional rather than the inbox resolving a date before navigating -- a design
+     * that resolved here would work for a tapped card and not for a tapped push, and those two must
+     * stay identical.
      */
     fun routeFor(message: PushMessage?): String? = when (val target = message?.target) {
         is NotifTarget.FeedbackThread -> "feedback_thread/${target.feedbackId}"
+        is NotifTarget.TaskDetail -> "tugas_detail/${target.tugasId}"
         NotifTarget.None, null -> null
     }
 
@@ -93,11 +99,19 @@ object PushPayload {
      * Stable for a given notification row, so FCM re-delivering the same row replaces the entry
      * instead of stacking a second identical one. Falls back through the entity id to a constant, so
      * a payload missing both still posts somewhere rather than throwing.
+     *
+     * The fallback reads the id out of every target rather than only the feedback one. As an
+     * `as? FeedbackThread` it silently skipped task rows, so two task pushes arriving without a
+     * `notification_id` shared [FALLBACK_TRAY_ID] and the second replaced the first in the tray --
+     * a `when` over the sealed type makes that omission a compile error the next time a target is
+     * added.
      */
     fun notificationIdFor(message: PushMessage?): Int {
-        val seed = message?.notificationId
-            ?: (message?.target as? NotifTarget.FeedbackThread)?.feedbackId
-            ?: return FALLBACK_TRAY_ID
+        val seed = message?.notificationId ?: when (val target = message?.target) {
+            is NotifTarget.FeedbackThread -> target.feedbackId
+            is NotifTarget.TaskDetail -> target.tugasId
+            NotifTarget.None, null -> null
+        } ?: return FALLBACK_TRAY_ID
         return seed.hashCode()
     }
 

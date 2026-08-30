@@ -108,11 +108,22 @@ class NotificationDisplayTest {
     }
 
     @Test
-    fun `a task notification opens nothing`() {
-        // Not an oversight. The route is tugas_detail/{tugasId}/{occurrenceDate} and a notification
-        // carries no occurrence date; a recurring program has dozens and none of them is the right
-        // one. Anyone "fixing" the dead tap by navigating will fail here first.
-        assertEquals(NotifTarget.None, NotifDisplay.targetOf("tugas", "t-1"))
+    fun `a task notification opens the task`() {
+        // This used to assert None, on the argument that tugas_detail/{tugasId}/{occurrenceDate}
+        // needed a date the notification has never carried. The premise still holds -- there is no
+        // date column and a recurring programme has dozens of occurrences -- but the route now
+        // declares that argument optional and the screen resolves one from the task's own rule.
+        assertEquals(NotifTarget.TaskDetail("t-1"), NotifDisplay.targetOf("tugas", "t-1"))
+    }
+
+    @Test
+    fun `a task notification with no entity id opens nothing`() {
+        // The blank-id guard runs before the table dispatch, so `tugas` inherits the protection
+        // that was written for `feedback`. Without it a tap navigates to tugas_detail/ and lands
+        // on a route that matches nothing.
+        assertEquals(NotifTarget.None, NotifDisplay.targetOf("tugas", null))
+        assertEquals(NotifTarget.None, NotifDisplay.targetOf("tugas", "   "))
+        assertEquals(NotifTarget.None, NotifDisplay.targetOf("tugas", ""))
     }
 
     @Test
@@ -146,9 +157,11 @@ class NotificationDisplayTest {
             NotifDisplay.from(taskKindPointingAtFeedback).target,
         )
 
+        // Both halves now assert a real destination, so the independence of icon kind and
+        // destination is pinned in both directions rather than one direction and one dead end.
         val replyKindPointingAtTask =
             notif(type = "feedback_balasan", entityTable = "tugas", entityId = "t-9")
-        assertEquals(NotifTarget.None, NotifDisplay.from(replyKindPointingAtTask).target)
+        assertEquals(NotifTarget.TaskDetail("t-9"), NotifDisplay.from(replyKindPointingAtTask).target)
     }
 
     // ---- from ----
@@ -169,7 +182,7 @@ class NotificationDisplayTest {
         assertEquals(NotifType.TUGAS_BARU, mapped.type)
         assertEquals("Kak Dewi memberi tugas untuk Andi", mapped.title)
         assertEquals("Latihan Sensori", mapped.body)
-        assertEquals(NotifTarget.None, mapped.target)
+        assertEquals(NotifTarget.TaskDetail("t-1"), mapped.target)
         assertEquals(false, mapped.isRead)
     }
 

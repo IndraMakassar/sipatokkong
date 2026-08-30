@@ -1,6 +1,7 @@
 package com.antoniusindra.sipatokkong.ui.notifications
 
 import com.antoniusindra.sipatokkong.data.model.CATATAN_RUTIN
+import com.antoniusindra.sipatokkong.data.model.hasTypedNote
 import com.antoniusindra.sipatokkong.data.model.Notification
 
 /** `notif_type` values, as the strings Postgres actually sends. */
@@ -10,6 +11,7 @@ private const val TYPE_FEEDBACK_BALASAN = "feedback_balasan"
 
 /** `entity_table` values the triggers write. */
 private const val ENTITY_FEEDBACK = "feedback"
+private const val ENTITY_TUGAS = "tugas"
 
 /**
  * Notification kinds as an inbox draws them.
@@ -46,6 +48,14 @@ sealed interface NotifTarget {
 
     /** Opens the feedback thread. `entity_id` on these rows is the thread id, not the reply id. */
     data class FeedbackThread(val feedbackId: String) : NotifTarget
+
+    /**
+     * Opens the task. Carries no date, and cannot: see [NotifDisplay.targetOf].
+     *
+     * The destination declares `occurrenceDate` optional and resolves one from the task's own
+     * recurrence rule when it is absent.
+     */
+    data class TaskDetail(val tugasId: String) : NotifTarget
 
     /** Nothing to open. The row still marks itself read when tapped. */
     data object None : NotifTarget
@@ -115,22 +125,31 @@ object NotifDisplay {
     /**
      * Where a tap goes.
      *
-     * `feedback` rows deep-link, because `entity_id` on them is already the thread id and the route
-     * `feedback_thread/{feedbackId}` takes exactly that.
+     * Both known tables deep-link, from the same pointer: `entity_id` is the thread id on a
+     * `feedback` row and the task id on a `tugas` row, and each route takes exactly that.
      *
-     * `tugas` rows deliberately yield [NotifTarget.None]. The task route is
-     * `tugas_detail/{tugasId}/{occurrenceDate}` and a notification carries no occurrence date; a
-     * recurring program has dozens of occurrences and no single one of them is the right answer.
-     * Guessing a date would open a screen the parent did not ask for.
+     * `tugas` rows used to yield [NotifTarget.None], on the argument that the route was
+     * `tugas_detail/{tugasId}/{occurrenceDate}` and a notification carries no date. The premise is
+     * still true -- `notifications` has no date column, and a `tugas_baru` row is written when the
+     * programme is created, rarely a day any occurrence falls on. What changed is the conclusion:
+     * the destination now declares that argument optional and resolves a date through
+     * `RecurrenceRule.occurrenceNearest`, so the missing date is answered where the task has
+     * already been fetched instead of being a reason to go nowhere.
      *
-     * A blank or missing `entity_id`, and any `entity_table` this build does not recognise, also
-     * yield [NotifTarget.None] -- navigating to `feedback_thread/null` opens a screen that can only
-     * fail, which is worse than a tap that does nothing.
+     * The blank-id guard runs **before** the table dispatch, so it protects both tables rather
+     * than only the one it was written for. A blank or missing `entity_id`, and any `entity_table`
+     * this build does not recognise, still yield [NotifTarget.None] -- navigating to
+     * `feedback_thread/null` opens a screen that can only fail, which is worse than a tap that
+     * does nothing.
      */
     fun targetOf(entityTable: String?, entityId: String?): NotifTarget {
-        if (entityTable != ENTITY_FEEDBACK) return NotifTarget.None
         val id = entityId?.trim().orEmpty()
-        return if (id.isEmpty()) NotifTarget.None else NotifTarget.FeedbackThread(id)
+        if (id.isEmpty()) return NotifTarget.None
+        return when (entityTable) {
+            ENTITY_FEEDBACK -> NotifTarget.FeedbackThread(id)
+            ENTITY_TUGAS -> NotifTarget.TaskDetail(id)
+            else -> NotifTarget.None
+        }
     }
 
     /**
@@ -192,7 +211,7 @@ object NotifDisplay {
      * card whose ripple is deliberately disabled.
      */
     private fun bodyLineOf(raw: String?): String? =
-        raw?.trim()?.takeIf { it.isNotEmpty() && it != CATATAN_RUTIN }
+        raw?.trim()?.takeIf { hasTypedNote(it) }
 
     private fun fallbackTitleFor(kind: NotifType): String = when (kind) {
         NotifType.TUGAS_BARU -> FALLBACK_TITLE_TUGAS
