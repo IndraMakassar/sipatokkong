@@ -37,9 +37,10 @@ class NotificationRepository(private val client: SupabaseClient) {
      *
      * **The `id` ordering is a tiebreaker, and it is load-bearing now that pages exist.**
      * `created_at` alone is not a total order and Postgres breaks ties arbitrarily, so a tied row
-     * can be returned on two pages or on neither. Ties are rare today -- each trigger writes one row
-     * per recipient per transaction -- but a `tugas_reminder` cron inserting a batch would stamp
-     * every row with the same `now()`.
+     * can be returned on two pages or on neither. This was written as a precaution against a
+     * hypothetical batch writer; migrations `0012`/`0013` made it real. `kirim_pengingat_tugas()`
+     * inserts every reminder in ONE statement, so all of them carry the identical transaction
+     * `now()` -- a parent with several tasks due gets a genuine tie every morning.
      *
      * `range(from, to)` is how this version of postgrest-kt expresses offset+limit; `range(0, 49)`
      * is exactly the query this used to make, so there is one code path and no first-page branch.

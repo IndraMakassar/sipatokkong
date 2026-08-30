@@ -14,9 +14,10 @@ import kotlinx.serialization.Serializable
  * [type] is a **String, not a Kotlin enum**, and that is the load-bearing decision in this file.
  * `kotlinx.serialization` throws on an unknown enum constant, and it throws inside `decodeList` --
  * so one unrecognised row would take down the entire inbox rather than one card. The Postgres enum
- * `notif_type` already declares three values nothing currently writes (`tugas_reminder`,
- * `tugas_missed`, `presensi`); the day a cron job starts writing one of them, a parent still on an
- * older build must keep seeing their notifications. The String is narrowed to a UI kind by
+ * `notif_type` still declares two values nothing writes (`tugas_missed`, `presensi`) -- and the
+ * third, `tugas_reminder`, is exactly the case this defends against having already happened: a cron
+ * job (migration `0012`) began writing it long after builds carrying no knowledge of it had shipped,
+ * and those parents kept seeing their inbox. The next value must behave the same way. The String is narrowed to a UI kind by
  * `NotifDisplay.kindOf`, which has a fallback. Same defensive posture as [Presensi.parsedDate].
  *
  * [title], [body], [entityTable] and [entityId] are nullable because the columns are, even though

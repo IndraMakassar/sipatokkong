@@ -7,7 +7,7 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 
 ### ✅ Built / Completed
 *   **Infrastructure:** Supabase project setup, database schema, RLS policies, and storage bucket
-    configurations. **All migrations `0001` through `0012` are applied**, as of 2026-08-30 — and
+    configurations. **Migrations `0001` through `0012` are applied; `0013` is written but NOT yet run**, as of 2026-08-30 — and
     that is a fact the database records rather than a claim in this file:
     `supabase_migrations.schema_migrations` holds all twelve, and a probe query confirmed each
     function landed (`notif_snippet`, the renamed trigger bodies, `tugas_jatuh_pada`,
@@ -62,10 +62,13 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
     Tapping one from a cold start opens the right screen; that path crashed until the same day and
     the fix is in the Change Log. Both bells still refresh only on route entry, so a notification
     arriving while the app is open is not seen until the user navigates.
-    `'tugas_reminder'` is now written by the daily `pengingat-tugas` cron job (migration `0012`,
-    **not yet run**) and has its own `NotifType`, icon and tests. The `notif_type` values
-    `'presensi'` and `'tugas_missed'` remain declared but unused — no trigger writes them, and the
-    UI renders them generically on purpose.
+    `'tugas_reminder'` is written by the daily `pengingat-tugas` cron job and has its own
+    `NotifType`, icon and tests. `0012` (applied) sends it on the day an occurrence falls; `0013`
+    (**written, not yet run**) adds H-3 and H-1 for one-shot tasks only. **Neither has ever fired
+    in production** — `kirim_pengingat_tugas()` has returned `0` on all four calls so far because no
+    task fell due on those days, so `tugas_jatuh_pada` has yet to match a single row. The
+    `notif_type` values `'presensi'` and `'tugas_missed'` remain declared but unused — no trigger
+    writes them, and the UI renders them generically on purpose.
 
 
 ### ❌ Not Built / Deferred
@@ -295,6 +298,62 @@ child so `is_parent_of` admits their parent.
     of this limitation that remains true.
 
 ## Change Log
+
+### [2026-08-30] - Reminders Before a One-Shot Task Is Due, and What "Deadline" Actually Means Here
+* **Asked whether a "deadline approaching" reminder existed, the answer was no.** `0012` reminds on
+    the day an occurrence falls and nothing sooner — its only predicate is
+    `tugas_jatuh_pada(t, hari_ini)`, a same-day equality test. For a task assigned a week ahead that
+    is one notification, on the morning it is already due.
+* **`deadline` is not a deadline, and that finding shaped the whole feature.** The field appears
+    only in the non-recurring branch of the create form (`CreateTaskScreen.kt:331-351`) and
+    `CreateTaskViewModel.kt:428-430` writes `null` for every recurring type. For a `once` task it
+    **is** the occurrence date (`Task.kt:204-213`). So "approaching deadline" and "approaching
+    occurrence" are the same question here, and `tugas_jatuh_pada` already answers it — the new
+    migration needed no date arithmetic of its own, only a shifted argument.
+* **`0013` adds H-3 and H-1 for `once` tasks only.** A daily programme is "due tomorrow" every
+    single day, so an H-1 rule on it would send two notifications a day per task, forever; three
+    active tasks would be six a day. That is how people learn to turn notifications off, and it
+    would cost this app the only channel it has to reach a parent.
+* **No new `notif_type` value, and the reasoning is a dependency worth recording.** `tugas_reminder`
+    is reused. The dedupe key is (task, type, today) and a `once` task has exactly **one**
+    occurrence, so its three reminders fall on three different days and cannot suppress each other.
+    **That safety ends if the lookahead is ever extended to recurring tasks** — one task could then
+    occupy two buckets on one day and the per-day dedupe would silently drop one. The fix at that
+    point would need the target occurrence date in the dedupe, which `notifications` has no column
+    for. Said in the migration itself, not only here.
+* **No client change at all.** `tugas_reminder` already maps to `NotifType.TUGAS_REMINDER` with its
+    alarm icon, the row already carries `entity_table = 'tugas'` so the deep link works, and
+    `styleFor` already gives it the expandable tray layout. Verified by reading each of those,
+    rather than assumed.
+* **The completion check uses the occurrence being reminded about, not today.** `hari_ini` there
+    would be wrong in both directions: it would keep nagging about a task the parent finished early,
+    and it would suppress a real H-3 reminder whenever some unrelated occurrence happened to be
+    completed today.
+* **Two comments elsewhere had gone false and were rewritten rather than left.** `Notification.kt`
+    still described `tugas_reminder` as a value nothing writes — it is now the proof that the
+    String-not-enum defence works, since `0012` began writing it long after builds that had never
+    heard of it had shipped. And `NotificationRepository`'s `id` tiebreaker was justified against a
+    *hypothetical* batch writer; `kirim_pengingat_tugas()` inserts every reminder in one statement,
+    so all rows share the identical transaction `now()` and the tie is now real every morning.
+* **A trap recorded for whoever finds "the reminder never arrives".** The Deadline field is labelled
+    "(opsional)" and `submit()` never validates it. Left empty, `toRecurrenceRule` falls back to
+    `created_at`, so a one-shot task is due **the day it was created** — already past, so H-3 and
+    H-1 can never fire for it. The same fallback is why such a task shows "Terlambat" on the
+    parent's home the next morning. Left as-is by decision; written into `0013`'s footer so it is
+    diagnosable as a filled-in field rather than a broken job.
+* **Verified:** build clean, 333 tests still pass, zero warnings — which only proves nothing was
+    broken, since this change is one SQL function and adds no Kotlin.
+* **NOT verified, and this is the second migration in a row handed over unexecuted.** I have no
+    database credentials and the Supabase CLI here is not authenticated. Worth stating plainly:
+    `0012` was handed over the same way and `kirim_pengingat_tugas()` has since been called four
+    times, returning `0` every time, because no task fell due on those days — so
+    `tugas_jatuh_pada` has still never matched a single row in production. "It reads correctly" has
+    already been shown not to mean "it fires".
+* **No tests, and not for lack of trying to find an honest one.** This is one SQL function; the repo
+    is JUnit4-only with no Postgres in the test path. Kotlin assertions about `RecurrenceRule` would
+    test the Kotlin, not the SQL that must match it, and would read as coverage that does not exist.
+    What replaces them is the dry-run query in `0013`'s footer, which shows exactly which tasks
+    would be notified and in which bucket without sending anything.
 
 ### [2026-08-30] - Tapping a Push From a Cold Start Killed the App, and My First Fix Did Not Work
 * **The symptom, reported from a real device:** a volunteer creates a task, the parent's phone
