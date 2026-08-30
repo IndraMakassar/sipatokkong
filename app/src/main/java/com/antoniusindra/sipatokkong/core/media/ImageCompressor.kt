@@ -26,14 +26,18 @@ import java.io.File
  */
 object ImageCompressor {
 
-    /** Supabase's cap for the `presensi` bucket, enforced here so the user gets a readable error. */
+    /**
+     * Supabase's bucket cap, enforced here so the user gets a readable error instead of a raw one.
+     *
+     * Shared by the presensi photo and the parent's task proof; both buckets carry the same limit.
+     */
     const val MAX_UPLOAD_BYTES: Long = 6L * 1024 * 1024
 
     private const val TARGET_BYTES: Long = 200_000
 
     /** Reads [uri], re-encodes it as a small JPEG, and returns the bytes. */
     suspend fun compressToJpeg(context: Context, uri: Uri): ByteArray = withContext(Dispatchers.IO) {
-        val source = File.createTempFile("presensi_src_", ".img", context.cacheDir)
+        val source = File.createTempFile("compress_src_", ".img", context.cacheDir)
         var compressed: File? = null
         try {
             context.contentResolver.openInputStream(uri)?.use { input ->

@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
+import com.antoniusindra.sipatokkong.core.media.ImageCompressor
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
 import com.antoniusindra.sipatokkong.core.media.MediaBucket
 import com.antoniusindra.sipatokkong.core.media.MediaDownloadHandler
@@ -155,6 +156,14 @@ class TaskDetailViewModel(
     fun onDurationChange(d: WorkDuration) = _uiState.update { it.copy(duration = d) }
     fun onCatatanChange(v: String) = _uiState.update { it.copy(catatan = v) }
 
+    /**
+     * Accepts a proof from either source, gallery or camera.
+     *
+     * The camera path reaches here as a FileProvider URI whose MIME is resolved from the file
+     * SUFFIX -- `CameraUriManager` creates `.jpg`, which resolves to `image/jpeg` and so passes the
+     * whitelist below. Those two facts are coupled and neither file says so on its own: change the
+     * suffix there and every camera capture starts failing here with "Format tidak didukung".
+     */
     fun onProofPicked(uri: Uri) {
         val mime = ServiceLocator.appContext.contentResolver.getType(uri)
         val (kind, ext) = when (mime) {
@@ -192,13 +201,36 @@ class TaskDetailViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isSubmitting = true, submitError = null) }
             try {
-                val bytes = withContext(Dispatchers.IO) {
-                    ServiceLocator.appContext.contentResolver
-                        .openInputStream(Uri.parse(s.proofUri))
-                        ?.use { it.readBytes() }
-                } ?: throw IllegalStateException("Gagal membaca file bukti.")
+                // Compressed, not raw. This path uploaded whatever the user picked at full size,
+                // which survived only because a gallery pick is usually already small. A camera
+                // photo is 3-8 MB, and this app's stated constraint is 200 KB -- paid for out of a
+                // low-income family's data. Adding capture without this would be a bandwidth
+                // regression wearing a feature's clothes.
+                //
+                // Images only: compressToJpeg re-encodes as JPEG, which would corrupt a video.
+                // Video proof therefore still uploads raw -- recorded as debt, and not reachable
+                // from the camera, which only takes photos.
+                val isImage = s.proofKind == MediaKind.IMAGE
+                val bytes = if (isImage) {
+                    ImageCompressor.compressToJpeg(ServiceLocator.appContext, Uri.parse(s.proofUri))
+                } else {
+                    withContext(Dispatchers.IO) {
+                        ServiceLocator.appContext.contentResolver
+                            .openInputStream(Uri.parse(s.proofUri))
+                            ?.use { it.readBytes() }
+                    } ?: throw IllegalStateException("Gagal membaca file bukti.")
+                }
 
-                val path = taskRepository.uploadDocumentation(tugas.anakId, bytes, proofExt!!)
+                // Last guard before the bucket's own limit rejects it with a raw error, matching
+                // what CreatePresensiViewModel already does.
+                if (bytes.size > ImageCompressor.MAX_UPLOAD_BYTES) {
+                    throw IllegalStateException("Bukti terlalu besar untuk diunggah. Coba file lain.")
+                }
+
+                // The compressor always emits JPEG, so a picked .webp would otherwise be stored
+                // under a name that lies about its contents.
+                val ext = if (isImage) "jpg" else proofExt!!
+                val path = taskRepository.uploadDocumentation(tugas.anakId, bytes, ext)
 
                 val dokumentasiId = taskRepository.createDocumentation(
                     DocumentationInsert(

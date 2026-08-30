@@ -42,6 +42,15 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.core.app.NotificationManagerCompat
 import com.antoniusindra.sipatokkong.core.push.PushPayload
+import android.net.Uri
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import com.antoniusindra.sipatokkong.core.media.CameraUriManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -116,6 +125,37 @@ fun TaskDetailScreen(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> if (uri != null) viewModel.onProofPicked(uri) }
 
+    // rememberSaveable, not remember: handing control to the camera app can take this process down,
+    // and a plain remember would come back null with the photo already on disk and unreachable.
+    // Same reason CreatePresensiScreen does it.
+    var cameraUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success -> if (success) cameraUri?.let { viewModel.onProofPicked(it) } }
+
+    var showSourceChoice by rememberSaveable { mutableStateOf(false) }
+
+    if (showSourceChoice) {
+        ProofSourceDialog(
+            onDismiss = { showSourceChoice = false },
+            onCamera = {
+                showSourceChoice = false
+                // createTempUri writes into cacheDir/camera, which is the only root file_paths.xml
+                // exports -- anywhere else and FileProvider throws "Failed to find configured root".
+                val uri = CameraUriManager.createTempUri(context)
+                cameraUri = uri
+                cameraLauncher.launch(uri)
+            },
+            onGallery = {
+                showSourceChoice = false
+                proofPicker.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+                )
+            },
+        )
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -139,11 +179,7 @@ fun TaskDetailScreen(
                     alreadyDone = ui.alreadyDone,
                     hasProof = ui.proofUri != null,
                     isSubmitting = ui.isSubmitting,
-                    onPick = {
-                        proofPicker.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
-                        )
-                    },
+                    onPick = { showSourceChoice = true },
                     onSubmit = viewModel::submit,
                 )
             }
@@ -500,6 +536,45 @@ private fun ResponseCard(
             )
         }
     }
+}
+
+/**
+ * Camera or gallery, asked once, with two equally weighted choices.
+ *
+ * Two full-width buttons rather than a bottom sheet: this audience is low-literacy, and a labelled
+ * target with an icon is easier to hit and to understand than a sheet whose affordance has to be
+ * learned. AlertDialog is also what the notification sweep confirmation already uses, so it is one
+ * pattern in the app rather than two.
+ */
+@Composable
+private fun ProofSourceDialog(
+    onDismiss: () -> Unit,
+    onCamera: () -> Unit,
+    onGallery: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Kirim bukti dari mana?", fontWeight = FontWeight.Bold) },
+        text = { Text("Ambil foto sekarang, atau pilih file yang sudah ada di HP Anda.") },
+        confirmButton = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(onClick = onCamera, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.PhotoCamera, contentDescription = null)
+                    Spacer(Modifier.size(8.dp))
+                    Text("Ambil Foto")
+                }
+                OutlinedButton(onClick = onGallery, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.PhotoLibrary, contentDescription = null)
+                    Spacer(Modifier.size(8.dp))
+                    Text("Pilih dari Galeri")
+                }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } },
+    )
 }
 
 @Composable

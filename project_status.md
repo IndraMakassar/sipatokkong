@@ -49,9 +49,9 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
     replies for the volunteer and a triaged inbox ("Perlu Ditanggapi" / "Sudah Beres").
 
 ### 🚧 In Progress / Partially Built
-*   **Media Compression:** Wired up for the presensi photo upload only (`core/media/ImageCompressor`).
-    The `tugas-demo` and `dokumentasi` uploads still send raw bytes; `LightCompressor` (video) is
-    still unused.
+*   **Media Compression:** Wired up for the presensi photo **and** the parent's task proof
+    (`core/media/ImageCompressor`, images only). The `tugas-demo` upload and any **video** proof
+    still send raw bytes; `LightCompressor` (video) is still unused.
 *   **Notifications:** The read path is done for **both** roles — every row any trigger writes is
     now reachable in the app, through one shared `NotificationScreen`. Still pending: real-time
     updates (the table is **not** in the `supabase_realtime` publication, so a subscription would
@@ -301,6 +301,46 @@ child so `is_parent_of` admits their parent.
     of this limitation that remains true.
 
 ## Change Log
+
+### [2026-08-30] - Camera for Task Proof, and the Compression It Could Not Ship Without
+* **A parent could only pick proof from the gallery**, while the button beside the picker already
+    wore a camera icon and read "Kirim Bukti Foto" — a small lie since it shipped.
+* **Every piece of the camera path already existed.** `ActivityResultContracts.TakePicture` +
+    `CameraUriManager.createTempUri` + a `FileProvider` exporting exactly `cacheDir/camera/` have
+    been working in the volunteer's presensi flow all along. This borrowed that pattern rather than
+    inventing one, `rememberSaveable` on the temp URI included — handing control to the camera app
+    can take the process down, and a plain `remember` returns null with the photo already on disk.
+* **`android.permission.CAMERA` is still not declared, deliberately.** `TakePicture` delegates to an
+    external camera app, and declaring the permission would *create* a runtime-permission
+    requirement this app currently escapes.
+* **The real work was compression, and it was not optional.** `TaskDetailViewModel.submit()` read
+    raw bytes straight to Supabase with no size check. That survived only because a gallery pick is
+    usually already small; a camera photo is 3-8 MB, against a stated constraint of 200 KB paid for
+    out of a low-income family's data. Shipping capture without compression would have been a
+    bandwidth regression wearing a feature's clothes, so the two are one commit.
+* **`ImageCompressor` finally has a second caller** (1280x1280, quality 80, 200 KB target). Three
+    consequences of it being JPEG-only, all handled: images compress and video passes through
+    untouched; the extension is forced to `jpg` for a compressed image, or a picked `.webp` would be
+    stored under a name that lies about its contents; and its temp prefix, hardcoded
+    `"presensi_src_"`, was renamed now that it is shared.
+* **Video proof still uploads raw**, recorded as debt. No new video can arrive through this change —
+    the camera takes photos only — and `LightCompressor` remains an unused dependency.
+* **The chooser is an AlertDialog with two full-width buttons**, not a bottom sheet. For a
+    low-literacy audience a labelled target with an icon beats an affordance that has to be learned,
+    and AlertDialog is what the notification sweep confirmation already uses — one pattern, not two.
+* **A coupling that neither file admitted to, now written down:** the camera arrives as a
+    FileProvider URI whose MIME is resolved from the file *suffix*. `CameraUriManager` creates
+    `.jpg`, which resolves to `image/jpeg` and passes `onProofPicked`'s whitelist. Change the suffix
+    there and every capture starts failing here with "Format tidak didukung".
+* **Verified:** build clean, 348 tests still green, zero warnings, APK installed and cold-started
+    with no crash.
+* **Not verified, and it is the whole feature:** that the camera opens, that the photo previews and
+    uploads, and — the half most likely to be silently missing — that the uploaded file is ~200 KB
+    rather than several megabytes. All three need a signed-in device; check the object size in
+    Supabase Storage, not just that the upload succeeded.
+* **Adds no tests, and not for lack of looking.** The launcher, the dialog and `ImageCompressor` all
+    need `Context`/`Uri`, and this repo has no Robolectric. Nothing pure was extracted because
+    nothing here is pure.
 
 ### [2026-08-30] - Feedback Pushes Are Conversations Now, So the Name Sits Beside the Face
 * **The request:** in the tray, the sender's name sat on the title line — visually under the app-name
