@@ -61,8 +61,9 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
     carrying the volunteer's and child's names — so `0010` is confirmed working, not merely applied.
     Tapping one from a cold start opens the right screen; that path crashed until the same day and
     the fix is in the Change Log. Both bells still refresh only on route entry, so a notification
-    arriving while the app is open is not seen until the user navigates. In the tray, notifications
-    now collapse per entity: every message in one feedback thread shares a card and accumulates into
+    arriving while the app is open is not seen until the user navigates. In the tray, feedback pushes are
+    published as Android **conversations** (long-lived shortcut + Person, so the sender's name sits
+    beside their avatar on Android 11+), and notifications collapse per entity: every message in one feedback thread shares a card and accumulates into
     a conversation, and every reminder about one task replaces the last.
     `'tugas_reminder'` is written by the daily `pengingat-tugas` cron job and has its own
     `NotifType`, icon and tests. `0012` (applied) sends it on the day an occurrence falls; `0013`
@@ -300,6 +301,51 @@ child so `is_parent_of` admits their parent.
     of this limitation that remains true.
 
 ## Change Log
+
+### [2026-08-30] - Feedback Pushes Are Conversations Now, So the Name Sits Beside the Face
+* **The request:** in the tray, the sender's name sat on the title line — visually under the app-name
+    row — while the avatar was thrown to the far right. Put the parent's name **next to the person's
+    avatar**, not next to the app logo.
+* **That layout is not a styling option.** Android 11+ draws a notification in the **Conversations**
+    section, avatar and name together with a reply affordance, only when it carries a `shortcutId`
+    naming a **long-lived shortcut with a `Person` attached**. `MessagingStyle` alone — which this
+    app has used all along — has never been enough, and this repo published no shortcuts at all.
+* **`PushNotifier` now publishes one long-lived shortcut per feedback thread** and points the
+    notification at it. `pushDynamicShortcut`, not `setDynamicShortcuts`: it rotates the
+    least-recently-used entry out itself at the per-app cap, so a foundation with many parents
+    cannot overflow it and lose newer conversations.
+* **Only the MESSAGING branch gets one.** A task reminder is not a conversation, and a shortcut
+    would promote it into the Conversations section above the messages it is not.
+* **Both required calls fail silently when missing**, which is the trap worth recording:
+    `setLongLived(true)` and `setPerson(...)`. Omit either and Android renders the old layout with
+    no error, no log, and nothing to grep for. If the card ever reverts, those are the first two
+    lines to read.
+* **The name beside the avatar is the parent's, via a new pure `NotifDisplay.senderOf`.** Migration
+    `0010` writes titles as `"<pengirim> · <anak>"`; a conversation card has room for one name and it
+    is the human who wrote the message. A title with no separator comes back whole, which is exactly
+    right for the fallback wordings where the title already *is* the best name available.
+* **The child is not lost, only kept off that one surface.** The in-app inbox renders the full title
+    straight from the row, and the thread screen carries its own `"<anak> · <ortu>"` header.
+* **The avatar is deliberately still derived from the FULL title.** `AvatarNaming.colorFor` hashes
+    the whole string, so feeding it the split name would silently repaint every existing
+    conversation; `initialOf` returns the same letter either way, because the person's name comes
+    first. The card changes what it says without changing what it looks like.
+* **Two of my own tests were wrong before the code was.** One asserted a nonsensical expectation
+    through a stray `let`; the other predicted the wrong result for a degenerate title that the
+    trigger cannot produce. Both were rewritten to pin what actually occurs — including an honest
+    one recording that a *person's name* containing the separator would be truncated, since
+    `substringBefore` takes the first, and that migration `0010` builds titles from `full_name`
+    where this app has no way to enter one.
+* **A real side effect at every API level:** a published dynamic shortcut appears when the user
+    long-presses the app icon. That is a launcher affordance this app has never had — arguably
+    useful, and definitely a visible change nobody asked for, so it is written down rather than
+    discovered.
+* **Verified:** 348 tests (from 340), 0 failures, zero warnings. The five new pure tests were each
+    confirmed to fail with the behaviour reverted. APK installed and cold-started with no crash.
+* **NOT verified, and it is the headline again:** the actual layout. It needs a real push arriving
+    on a signed-in **Android 11+** phone, and no phone was connected. `adb shell dumpsys shortcut`
+    showed nothing published, which is correct on a signed-out emulator where no push can arrive —
+    and is also the command to check first if the conversation styling does not appear.
 
 ### [2026-08-30] - "Mark as Read" Was Sending an Empty Body, and Had Been All Along
 * **The report:** tapping a notification leaves it unread, and "Tandai semua" clears the marks until

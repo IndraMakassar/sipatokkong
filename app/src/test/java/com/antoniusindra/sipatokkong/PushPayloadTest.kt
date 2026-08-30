@@ -380,4 +380,35 @@ class PushPayloadTest {
         assertEquals(PushStyle.PLAIN, PushPayload.styleFor(filler))
         assertEquals(PushStyle.PLAIN, PushPayload.styleFor(PushPayload.parse(feedbackPush(body = null))!!))
     }
+
+    // ---- the conversation shortcut ----
+
+    @Test
+    fun `one thread is one shortcut, and two threads are two`() {
+        assertEquals(
+            PushPayload.conversationShortcutId("fb-1"),
+            PushPayload.conversationShortcutId("fb-1"),
+        )
+        assertNotEquals(
+            PushPayload.conversationShortcutId("fb-1"),
+            PushPayload.conversationShortcutId("fb-2"),
+        )
+    }
+
+    @Test
+    fun `the shortcut id is namespaced, not a bare id`() {
+        // Shortcut ids are app-global. A bare uuid would collide with whatever this app publishes
+        // next, and a collision means one conversation silently overwriting another's shortcut.
+        assertEquals("percakapan:fb-1", PushPayload.conversationShortcutId("fb-1"))
+    }
+
+    @Test
+    fun `the shortcut and the tray slot are derived from the same thread`() {
+        // They address the same conversation from two different systems -- the shade and the
+        // launcher -- and if they ever stopped agreeing, Android would quietly stop treating the
+        // notification as a conversation with no error anywhere.
+        val push = PushPayload.parse(feedbackPush(entityId = "fb-9"))!!
+        assertEquals(PushPayload.trayIdForEntity("fb-9"), PushPayload.notificationIdFor(push))
+        assertEquals("percakapan:fb-9", PushPayload.conversationShortcutId("fb-9"))
+    }
 }

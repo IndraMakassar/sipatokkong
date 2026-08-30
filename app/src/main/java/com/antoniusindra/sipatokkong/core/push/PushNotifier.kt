@@ -10,6 +10,11 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
 import androidx.core.graphics.drawable.IconCompat
+import android.graphics.Bitmap
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import com.antoniusindra.sipatokkong.ui.notifications.NotifDisplay
+import com.antoniusindra.sipatokkong.ui.notifications.NotifTarget
 import androidx.core.content.ContextCompat
 import com.antoniusindra.sipatokkong.MainActivity
 import com.antoniusindra.sipatokkong.R
@@ -108,8 +113,13 @@ object PushNotifier {
                 // EXTRA_SELF_DISPLAY_NAME and some platform versions assert on a null. Never shown
                 // here, because no message is ever added without a sender.
                 val me = Person.Builder().setName("Saya").setKey("me").build()
+                // The person's name, not "<pengirim> · <anak>". A conversation card has room for
+                // one name beside the avatar and this is the one that belongs there; the child is
+                // still on every in-app surface. The AVATAR keeps using the full title on purpose --
+                // see NotifDisplay.senderOf.
+                val senderName = NotifDisplay.senderOf(message.title)
                 val sender = Person.Builder()
-                    .setName(message.title)
+                    .setName(senderName)
                     .setKey(message.title)
                     // createWithBitmap, NOT createWithAdaptiveBitmap: the adaptive variant applies
                     // the adaptive-icon mask and its inset to art it assumes is full-bleed square,
@@ -133,7 +143,14 @@ object PushNotifier {
                     .takeLast(MAX_TRAY_MESSAGES)
                     .forEach { style.addMessage(it) }
 
+                // Publishing this is what turns the card into a conversation. Without a
+                // long-lived shortcut carrying a Person, Android 11+ silently renders an ordinary
+                // notification -- name beside the app icon, avatar exiled to the right -- and says
+                // nothing about why. MessagingStyle alone has never been enough.
+                val shortcutId = publishConversation(context, message, senderName, avatar, route)
+
                 base.setStyle(style)
+                    .setShortcutId(shortcutId)
                     // Not redundant with the Person icon: androidx Person icons are only honoured
                     // from API 28, and minSdk here is 27. On that one level this is what shows.
                     .setLargeIcon(avatar)
@@ -165,6 +182,67 @@ object PushNotifier {
         runCatching { manager.notify(trayId, notification) }
             .onFailure { Log.w(PUSH_LOG_TAG, "notify failed: ${it.message}") }
     }
+    /**
+     * Publishes the long-lived shortcut this conversation is addressed by, and returns its id.
+     *
+     * Returns null -- and the notification falls back to today's ordinary layout -- when the push
+     * points at no entity, or when the launcher refuses the shortcut. Some OEM launchers do; that
+     * costs the conversation styling and must never cost the notification, which is why the publish
+     * is wrapped rather than allowed to propagate.
+     *
+     * `pushDynamicShortcut` rather than `setDynamicShortcuts`: it rotates the least-recently-used
+     * entry out itself when the per-app cap is reached, so a foundation with many parents cannot
+     * overflow it and lose newer conversations.
+     *
+     * The intent must carry an action or `build()` throws, and it is the same destination the
+     * notification taps through to -- so reaching a thread from the shade and from a long-press on
+     * the app icon land in the same place.
+     */
+    private fun publishConversation(
+        context: Context,
+        message: PushMessage,
+        senderName: String,
+        avatar: Bitmap,
+        route: String?,
+    ): String? {
+        val entityId = (message.target as? NotifTarget.FeedbackThread)?.feedbackId ?: return null
+        val shortcutId = PushPayload.conversationShortcutId(entityId)
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            route?.let { putExtra(EXTRA_PUSH_ROUTE, it) }
+        }
+
+        val shortcut = ShortcutInfoCompat.Builder(context, shortcutId)
+            .setShortLabel(senderName)
+            .setIcon(IconCompat.createWithBitmap(avatar))
+            // Both of these are load-bearing, and neither fails loudly when missing: without
+            // setLongLived the shortcut cannot back a conversation, and without a Person there is
+            // nobody for the card to draw.
+            .setLongLived(true)
+            .setPerson(
+                Person.Builder()
+                    .setName(senderName)
+                    .setKey(message.title)
+                    .setIcon(IconCompat.createWithBitmap(avatar))
+                    .build()
+            )
+            .setCategories(setOf(SHORTCUT_CATEGORY_CONVERSATION))
+            .setIntent(intent)
+            .build()
+
+        return runCatching {
+            ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
+            shortcutId
+        }.onFailure {
+            Log.w(PUSH_LOG_TAG, "gagal menerbitkan shortcut percakapan: ${it.message}")
+        }.getOrNull()
+    }
+
+    /** The category a sharing/conversation shortcut must declare. */
+    private const val SHORTCUT_CATEGORY_CONVERSATION = "android.shortcut.conversation"
+
     /**
      * The messages already showing in this tray slot, oldest first, or empty when there are none.
      *

@@ -132,6 +132,20 @@ object PushPayload {
      */
     fun trayIdForEntity(entityId: String): Int = entityId.hashCode()
 
+    /**
+     * The long-lived shortcut a conversation is published under.
+     *
+     * Android 11+ only draws a notification in the Conversations section -- avatar and name side by
+     * side, with a reply affordance -- when it names a shortcut that is long-lived and carries a
+     * `Person`. `MessagingStyle` on its own is not enough, which is why the card used to show the
+     * sender's name up beside the app icon instead.
+     *
+     * Derived from the same entity id as [notificationIdFor] so the two cannot drift: one
+     * conversation, one tray slot, one shortcut. Prefixed because a shortcut id is app-global and
+     * a bare uuid would collide with whatever this app publishes next.
+     */
+    fun conversationShortcutId(entityId: String): String = "percakapan:$entityId"
+
     private const val FALLBACK_TRAY_ID = 1
 
     /**

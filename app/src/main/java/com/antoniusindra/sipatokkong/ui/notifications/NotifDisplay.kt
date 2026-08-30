@@ -197,6 +197,27 @@ object NotifDisplay {
     fun from(rows: List<Notification>): List<NotificationItem> = rows.map(::from)
 
     /**
+     * The person half of a "<pengirim> · <anak>" notification title.
+     *
+     * Migration `0010` builds every feedback title that way, and the shape is deliberate: it made
+     * the title person-shaped so the tray could use it as a `Person` name. A conversation card has
+     * room for exactly one name beside the avatar, and the one that belongs there is the human who
+     * wrote the message -- not the human plus the child they wrote about.
+     *
+     * The child is not lost, only kept off that one surface. The in-app inbox renders the full
+     * title straight from the row, and the thread screen carries its own "<anak> · <ortu>" header.
+     *
+     * A title with no separator comes back whole, which is exactly right for the fallback wordings
+     * (`"Balasan feedback"`): there the entire title already is the best name available.
+     *
+     * Note that the avatar is deliberately NOT derived from this. `AvatarNaming.colorFor` hashes
+     * the whole string, so feeding it the split name would repaint every existing conversation;
+     * `initialOf` returns the same letter either way, because the person's name comes first.
+     */
+    fun senderOf(title: String): String =
+        title.substringBefore(" · ").trim().ifEmpty { title.trim() }
+
+    /**
      * The number on the bell, or null when there is nothing to say.
      *
      * Null rather than "0" so the badge disappears completely: a zero badge is a permanent mark on

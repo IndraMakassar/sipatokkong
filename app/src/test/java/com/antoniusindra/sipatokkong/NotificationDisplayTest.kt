@@ -477,4 +477,50 @@ class NotificationDisplayTest {
         // copy of the filler must still be dropped rather than sneaking through as "typed".
         assertNull(NotifDisplay.from(notif(body = "  " + CATATAN_RUTIN + System.lineSeparator())).body)
     }
+
+    // ---- the name a conversation card shows beside the avatar ----
+
+    @Test
+    fun `the sender is the person half of the title`() {
+        // Migration 0010 writes "<pengirim> · <anak>". A conversation card has room for one name
+        // next to the avatar, and it is the human who wrote the message.
+        assertEquals("Sari Wulandari", NotifDisplay.senderOf("Sari Wulandari · Andi"))
+        assertEquals("Kak Dewi", NotifDisplay.senderOf("Kak Dewi · Andi"))
+    }
+
+    @Test
+    fun `a title with no separator is already the name`() {
+        // The fallback wordings, which no trigger builds from columns. Splitting must not turn
+        // them into something shorter and stranger.
+        assertEquals("Balasan feedback", NotifDisplay.senderOf("Balasan feedback"))
+        assertEquals("Feedback baru dari orang tua", NotifDisplay.senderOf("Feedback baru dari orang tua"))
+    }
+
+    @Test
+    fun `only the first separator counts`() {
+        // substringBefore takes the FIRST separator, so a name that itself contained one would be
+        // truncated. Asserted rather than guarded against, because migration 0010 builds the title
+        // from `profiles.full_name` and this app has no way to put a separator in one -- and if
+        // that ever changes, this test is where it will be noticed.
+        assertEquals("Sari", NotifDisplay.senderOf("Sari · Wulandari · Andi"))
+    }
+
+    @Test
+    fun `the sender survives padding around the name`() {
+        // The column is free text a human typed. Trimming here is what stops a leading space from
+        // becoming a leading space in the conversation card's title.
+        assertEquals("Sari Wulandari", NotifDisplay.senderOf("  Sari Wulandari   · Andi"))
+        assertEquals("Sari Wulandari", NotifDisplay.senderOf("  Sari Wulandari  "))
+    }
+
+    @Test
+    fun `every title the inbox can produce yields a usable name`() {
+        // senderOf is only ever fed NotifDisplay.from's title, which is non-blank by construction:
+        // a blank one is replaced by fallbackTitleFor. So the contract worth pinning is over the
+        // titles that actually reach it, not over arbitrary strings.
+        for (kind in listOf("tugas_baru", "feedback_baru", "feedback_balasan", "tugas_reminder", "apa_pun")) {
+            val title = NotifDisplay.from(notif(type = kind, title = null)).title
+            assertTrue(kind, NotifDisplay.senderOf(title).isNotBlank())
+        }
+    }
 }
