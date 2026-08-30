@@ -7,10 +7,13 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 
 ### ✅ Built / Completed
 *   **Infrastructure:** Supabase project setup, database schema, RLS policies, and storage bucket
-    configurations. **Migrations `0001` through `0009` are applied; `0010` is written but NOT yet run**, and as of 2026-08-30 that
-    is a fact the database itself records rather than a claim in this file:
-    `supabase_migrations.schema_migrations` now exists and holds all nine. Query it instead of
-    trusting this paragraph. The old duplicate-`0005` collision is resolved
+    configurations. **Migrations `0001` through `0009` are applied; `0010` and `0011` are written
+    but NOT yet run**, and as of 2026-08-30 that is a fact the database itself records rather than
+    a claim in this file: `supabase_migrations.schema_migrations` exists and holds all nine. Query
+    it instead of trusting this paragraph. **`0011` must be run after `0010`** -- it is a
+    `create or replace` of the same `on_balasan_insert` function, so running it alone would
+    revert `0010`'s naming work. Note that no migration file records itself in
+    `schema_migrations`; the first nine were backfilled by hand, and `0010`/`0011` need the same. The old duplicate-`0005` collision is resolved
     (`0007_presensi_unik_harian`).
 *   **Authentication:** Phone Number + PIN login flow mapped to Supabase Auth. Role-based routing (Admin, Parent, Volunteer).
 *   **Admin Features:**
@@ -284,6 +287,93 @@ child so `is_parent_of` admits their parent.
     of this limitation that remains true.
 
 ## Change Log
+
+### [2026-08-30] - Notifications That Arrive Somewhere, and Triage That Tells the Truth
+* **A task notification opened nothing, and the data had been there all along.** `on_tugas_insert`
+    has always written `entity_table = 'tugas'` and `entity_id = new.id`, and `push-notify`
+    forwards every column into the FCM payload. The client discarded it at one line in
+    `NotifDisplay.targetOf`. What was genuinely missing was not the task id but the **occurrence
+    date**: `notifications` has no date column, and a `tugas_baru` row is written when the
+    programme is created, which is rarely a day any of its occurrences falls on.
+* **The constraint that decided the design is the push, not the inbox.** `PushPayload.routeFor`
+    runs inside `SipatokkongMessagingService` while building a `PendingIntent`, where a suspend
+    `getTask()` is impossible. So resolving the date before navigating would have worked for a
+    tapped card and not for a tapped push — and those two must never disagree, which is the
+    invariant `PushPayloadTest` exists to defend. Instead `tugas_detail` now declares
+    `occurrenceDate` an **optional query argument**, following the idiom `create_program_ajar`
+    already uses in the same file, and `TaskDetailViewModel` resolves it. That resolution is free:
+    the recurrence rule it needs is on the `Task` that function already fetches on its first line.
+* **`RecurrenceRule.occurrenceNearest(today)`** is the new pure function — next occurrence on or
+    after today, else the most recent past one. It lives on the rule rather than beside
+    `TaskOccurrences` because the answer depends on the private `effectiveEnd`, which encodes the
+    `stoppedOn - 1` exclusivity; a helper outside the class would have to re-derive that and drift.
+* **Two subtleties in it that a simpler version gets wrong.** `ONCE` needs its own branch, so no
+    probe width can ever hide a one-shot task assigned two years ago. And the past side is anchored
+    on the rule's own end rather than on today, so a programme that finished 1500 days ago opens
+    its final day instead of erroring. `NEAREST_PROBE_DAYS = 1000` is not arbitrary:
+    `CreateTaskViewModel.onIntervalChange` caps the interval field with `take(3)`, so 999 days is
+    the widest gap between occurrences this app can create.
+* **A parent's reply now reopens the thread — migration `0011`, one UPDATE, no schema change.**
+    `feedback_status` has declared `'in_process'` since `0001` and nothing had ever written or read
+    it. `0010`'s comment said it deliberately left `status` alone on a parent reply; that reasoning
+    was right about a thread still waiting and blind to a thread already `answered`, where leaving
+    it alone keeps the note out of the volunteer's list forever. `0011` says so in place rather
+    than quietly replacing the comment.
+* **Free text is now a triage signal, and it needs no keyword list.** `CreateFeedbackViewModel`
+    backfills an untouched "Catatan Tambahan" with `CATATAN_RUTIN`, so the app already records the
+    *act* of typing. A parent who typed had something to say. This over-triages on purpose:
+    "Alhamdulillah anak senang sekali" costs a volunteer one read, while "anak demam 3 hari" filed
+    under Kabar Baik because the mood chip said Senang costs a child. Those errors are not
+    symmetric. **Expect past notes to reclassify in bulk when the APK updates.**
+* **`hasTypedNote` extracted to `FeedbackVocabulary`,** because that predicate had already been
+    written twice (`FeedbackSummary.headlineOf`, `NotifDisplay.bodyLineOf`) and this was the third
+    caller. Also moved `FeedbackChallenge`'s KDoc back onto `FeedbackChallenge`: two KDoc blocks
+    had stacked above `CATATAN_RUTIN`, so only the second was attached and the first documented
+    nothing.
+* **Names on the feedback screens, and the gap was wider than reported.** The thread screen said
+    only "Detail Feedback"; the **volunteer's feedback list was equally anonymous** — four assigned
+    children, four rows, no way to tell them apart. Both now carry "Andi · Ibu Sari", child first.
+    That is deliberately the reverse of `0010`'s notification title: a tray entry answers "who is
+    speaking", these screens are organised around the child.
+* **New `ChildRepository.visibleChildOptions()`** — id and name, **without** the `is_active`
+    filter the other list methods carry. That filter is right for a picker and wrong for labelling
+    history: the note about a child who has since left is exactly the one whose context is hardest
+    to reconstruct. Names are fetched only for a volunteer; a parent has one child and every note
+    is their own, so for them it would be two round trips to restate what they already know.
+* **No RLS change was needed in either direction,** verified against `0001:181-244`:
+    `is_relawan_of` gates both the feedback and `anak_select`, and `can_view_profile` admits a
+    volunteer to their children's parents. `0010` already recorded this precedent.
+* **Three silent breakages caught by design review rather than by the compiler.**
+    `NotificationScreen`'s `isActionable` read `target is FeedbackThread`, which would have
+    compiled untouched and left *read* task rows inert while unread ones navigated. `PushPayload`'s
+    tray-id fallback used `as? FeedbackThread`, so two task pushes without a `notification_id`
+    would have collided on one tray slot. And `NotificationViewModel`'s comment justifying the
+    `appScope` split inverted — it argued the split was needed *because* task notifications went
+    nowhere.
+* **A comment and a test of mine both claimed something false, and re-running the defect proved
+    it.** I wrote that the order of the `in_process` and `answered` checks was "the entire fix". It
+    is not: one column holds one value, so the branches are mutually exclusive and swapping them
+    changes nothing. Both were corrected to say so.
+* **A test was mislabelled in the same way.** "A program that ended long before the probe" used 400
+    days against a 1000-day probe, so it passed with or without the `effectiveEnd` anchoring it
+    claimed to pin. It now uses 1500 days, and was verified to fail without that anchoring.
+* **Verified:** `:app:testDebugUnitTest` + `:app:assembleDebug --rerun-tasks`, **322 tests (from
+    287), 0 failures, zero compiler warnings**. Every new rule was checked by reintroducing the
+    defect it guards — nine separate reversions across triage, recurrence, push and naming, each
+    confirmed to fail the intended test and only that test. The APK was installed on
+    `emulator-5554` and cold-started: the rewritten nav graph constructs with no
+    `IllegalArgumentException`, which is the one part of the routing change verifiable without
+    signing in.
+* **Not verified, and it is most of this.** Everything behind sign-in: that a task notification
+    opens the right day, that a push tapped from the tray reaches the same screen, that a parent's
+    reply moves a thread back to "Perlu Ditanggapi" (which additionally **requires `0011` to be
+    applied**), and that the names render correctly for a deactivated child.
+* **Debt, deliberately not paid here and recorded so it is not rediscovered as a mystery:**
+    `ResultExt.rethrowCancellation` is defined, tested four times and **called zero times**,
+    against 64 `runCatching` sites in `app/src/main`. It was written for a repo-wide sweep that has
+    not happened. Deferred by the maintainer's explicit choice so this diff stays reviewable; a
+    40-file mechanical change would bury it. Either sweep it or delete it — shipping it unused is
+    the one option that stays wrong.
 
 ### [2026-08-30] - Measuring the Cold Start Instead of Guessing at It
 * **The wait before the home screen was never network-bound, and I had been saying it was.** I had

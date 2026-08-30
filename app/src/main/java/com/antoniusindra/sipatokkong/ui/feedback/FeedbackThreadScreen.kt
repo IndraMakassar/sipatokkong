@@ -43,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -57,12 +58,6 @@ import com.antoniusindra.sipatokkong.ui.theme.IconBoxBg
 import com.antoniusindra.sipatokkong.ui.theme.MineBubble
 import com.antoniusindra.sipatokkong.ui.theme.MutedText
 import com.antoniusindra.sipatokkong.ui.theme.OtherBubble
-import com.antoniusindra.sipatokkong.ui.theme.StatusGreenBg
-import com.antoniusindra.sipatokkong.ui.theme.StatusGreenText
-import com.antoniusindra.sipatokkong.ui.theme.StatusOrangeBg
-import com.antoniusindra.sipatokkong.ui.theme.StatusOrangeText
-import com.antoniusindra.sipatokkong.ui.theme.StatusTealBg
-import com.antoniusindra.sipatokkong.ui.theme.StatusTealText
 import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -131,7 +126,7 @@ fun FeedbackThreadScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                FeedbackDetailCard(ui.feedback!!, today)
+                FeedbackDetailCard(ui.feedback!!, ui.who, today)
 
                 if (ui.replies.isEmpty()) {
                     Text("Belum ada balasan.", color = MutedText, style = MaterialTheme.typography.bodyMedium)
@@ -157,7 +152,7 @@ fun FeedbackThreadScreen(
 }
 
 @Composable
-private fun FeedbackDetailCard(fb: Feedback, today: LocalDate) {
+private fun FeedbackDetailCard(fb: Feedback, who: String?, today: LocalDate) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -166,6 +161,19 @@ private fun FeedbackDetailCard(fb: Feedback, today: LocalDate) {
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // The card's first line: this screen was reachable from a notification, a list and a
+            // deep link and said only "Detail Feedback" at the top, so a volunteer holding four
+            // children had no way to tell whose note they had opened. Two lines uncapped, because
+            // this is the answer to "who is this about" and truncating it withholds the answer.
+            who?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Box(
                     // IconBoxBg, the tile colour used everywhere else; MineBubble is the chat
@@ -185,17 +193,13 @@ private fun FeedbackDetailCard(fb: Feedback, today: LocalDate) {
                 }
                 // `status` was in hand here all along and never rendered, so a parent opening a
                 // thread could not tell whether it had been answered without reading the bubbles.
-                val chip = when (FeedbackTriage.stateOf(fb)) {
-                    FeedbackState.DIJAWAB -> Triple("Dijawab", StatusGreenBg, StatusGreenText)
-                    FeedbackState.PERLU_DIBALAS -> Triple("Perlu Dibalas", StatusOrangeBg, StatusOrangeText)
-                    FeedbackState.KABAR_BAIK -> Triple("Kabar Baik", StatusTealBg, StatusTealText)
-                }
+                val chip = feedbackChipStyle(FeedbackTriage.stateOf(fb))
                 Box(
                     modifier = Modifier
-                        .background(chip.second, CircleShape)
+                        .background(chip.bg, CircleShape)
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
-                    Text(chip.first, color = chip.third, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text(chip.label, color = chip.text, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
             }
 

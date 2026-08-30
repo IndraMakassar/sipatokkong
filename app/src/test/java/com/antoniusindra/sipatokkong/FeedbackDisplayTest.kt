@@ -5,6 +5,7 @@ import com.antoniusindra.sipatokkong.data.model.CATATAN_RUTIN
 import com.antoniusindra.sipatokkong.data.model.Feedback
 import com.antoniusindra.sipatokkong.data.model.FeedbackChallenge
 import com.antoniusindra.sipatokkong.data.model.FeedbackMood
+import com.antoniusindra.sipatokkong.ui.feedback.FeedbackListUiState
 import com.antoniusindra.sipatokkong.ui.feedback.FeedbackState
 import com.antoniusindra.sipatokkong.ui.feedback.FeedbackSummary
 import com.antoniusindra.sipatokkong.ui.feedback.FeedbackTriage
@@ -67,10 +68,16 @@ class FeedbackDisplayTest {
     @Test
     fun `a positive unanswered note is good news, not something waiting`() {
         // The exact row that used to read "Sudah Beres" and "Menunggu" at the same time.
+        //
+        // `isi` is pinned to the form's backfill rather than left on this file's default, which is
+        // typed text. Since free text became a triage signal, a note the parent wrote into needs
+        // attention whatever its mood -- so the default fixture would make this test pass or fail
+        // for a reason that has nothing to do with chip-versus-tab agreement, which is its subject.
         val fb = note(
             mood = FeedbackMood.SENANG,
             kendala = "${FeedbackChallenge.LANCAR}, ${FeedbackChallenge.BANYAK_KEMAJUAN}",
             status = "open",
+            isi = CATATAN_RUTIN,
         )
         assertEquals(FeedbackState.KABAR_BAIK, FeedbackTriage.stateOf(fb))
     }
@@ -147,5 +154,54 @@ class FeedbackDisplayTest {
         assertNull(formatIsoDate(null, today))
         assertNull(formatIsoDate("", today))
         assertNull(formatIsoDate("bukan tanggal", today))
+    }
+
+    // ---------------------------------------------------------------- who a note is about
+
+    @Test
+    fun `a volunteer sees the child first and then the parent`() {
+        // Child first, and deliberately the reverse of migration 0010's notification title
+        // ("Ibu Sari · Andi"). A tray entry answers "who is speaking"; this list answers
+        // "which child", which is what a volunteer holding four of them is scanning for.
+        assertEquals("Andi · Ibu Sari", FeedbackSummary.whoLine("Andi", "Ibu Sari"))
+    }
+
+    @Test
+    fun `a half-known pair prints the half it knows`() {
+        // A parent viewing their own note gets no parent name on purpose -- the ViewModel skips
+        // that round trip -- so this is the ordinary parent-side case, not an error path.
+        assertEquals("Andi", FeedbackSummary.whoLine("Andi", null))
+        assertEquals("Ibu Sari", FeedbackSummary.whoLine(null, "Ibu Sari"))
+    }
+
+    @Test
+    fun `nothing known prints no line at all`() {
+        // Null, not "Anak tidak dikenal": a placeholder tells a volunteer nothing they can act on
+        // and costs a row of height on a screen already dense with text.
+        assertNull(FeedbackSummary.whoLine(null, null))
+        assertNull(FeedbackSummary.whoLine("", "   "))
+    }
+
+    @Test
+    fun `stored padding does not become visible padding`() {
+        assertEquals("Andi · Ibu Sari", FeedbackSummary.whoLine("  Andi ", " Ibu Sari  "))
+    }
+
+    @Test
+    fun `the list resolves a row through its own id maps`() {
+        val fb = note()
+        val ui = FeedbackListUiState(
+            items = listOf(fb),
+            childNames = mapOf(fb.anakId to "Andi"),
+            parentNames = mapOf(fb.orangtuaId to "Ibu Sari"),
+        )
+        assertEquals("Andi · Ibu Sari", ui.whoOf(fb))
+    }
+
+    @Test
+    fun `a row whose child was deactivated before the maps loaded shows nothing`() {
+        // The parent view, where both maps are empty by design, and equally the volunteer view
+        // mid-load. Neither may render a broken half-line.
+        assertNull(FeedbackListUiState(items = listOf(note())).whoOf(note()))
     }
 }

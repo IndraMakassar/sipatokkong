@@ -90,6 +90,22 @@ class ChildRepository(private val client: SupabaseClient) {
             .decodeList<Child>()
             .sortedBy { it.nama.lowercase() }
 
+    /**
+     * Every child this user may see, id and name only, **including deactivated ones**.
+     *
+     * [childrenForCurrentVolunteer] filters `is_active = true`, which is right for a picker -- you
+     * should not be able to assign new work to a child who has left. It is wrong for labelling
+     * history: a feedback note written about a child who has since been deactivated would resolve
+     * to no name at all, and the row a volunteer most needs help identifying is the old one.
+     *
+     * Scoping stays RLS's job (`anak_select`), exactly as in the methods above; there is no
+     * client-side filter on who is asking.
+     */
+    suspend fun visibleChildOptions(): List<ChildOption> =
+        client.postgrest.from("anak")
+            .select(columns = Columns.list("id", "nama"))
+            .decodeList<ChildOption>()
+
     /** A single child by id. */
     suspend fun getChild(id: String): Child? =
         client.postgrest.from("anak")
