@@ -9,6 +9,7 @@ import com.antoniusindra.sipatokkong.ui.notifications.NotifType
 import com.antoniusindra.sipatokkong.ui.notifications.NotificationItem
 import com.antoniusindra.sipatokkong.ui.notifications.NotificationUiState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -72,12 +73,41 @@ class NotificationDisplayTest {
     }
 
     @Test
-    fun `the three kinds nothing writes still render, they do not vanish`() {
-        // Declared in notif_type but produced by no trigger and no cron job today. A cron job could
-        // start writing them without an app release, so they must degrade, not disappear.
-        for (type in listOf("tugas_reminder", "tugas_missed", "presensi")) {
+    fun `the kinds nothing writes still render, they do not vanish`() {
+        // Declared in notif_type but produced by no trigger and no cron job. A job could start
+        // writing them without an app release, so they must degrade, not disappear.
+        //
+        // This list was three until migration 0012 gave 'tugas_reminder' a real cron job and its
+        // own kind below. The remaining two are still unwritten.
+        for (type in listOf("tugas_missed", "presensi")) {
             assertEquals(type, NotifType.LAINNYA, NotifDisplay.kindOf(type))
         }
+    }
+
+    @Test
+    fun `the daily reminder is its own kind, not a generic bell`() {
+        // Migration 0012's cron job writes this. Kept separate from TUGAS_BARU because the two
+        // answer different questions -- "something arrived" versus "something is due now" -- and a
+        // parent scanning the list needs to tell a task they have seen from one they have not.
+        assertEquals(NotifType.TUGAS_REMINDER, NotifDisplay.kindOf("tugas_reminder"))
+    }
+
+    @Test
+    fun `a reminder row opens the task like any other tugas row`() {
+        // The cron job writes entity_table 'tugas', so it inherits the deep link for free. Pinned
+        // because the destination comes from entity_table and never from type -- a reminder must
+        // not need its own branch in targetOf.
+        val mapped = NotifDisplay.from(
+            notif(
+                type = "tugas_reminder",
+                title = "Tugas hari ini untuk Andi",
+                body = "Latihan Sensori",
+                entityTable = "tugas",
+                entityId = "t-7",
+            )
+        )
+        assertEquals(NotifType.TUGAS_REMINDER, mapped.type)
+        assertEquals(NotifTarget.TaskDetail("t-7"), mapped.target)
     }
 
     @Test
@@ -340,5 +370,111 @@ class NotificationDisplayTest {
         assertEquals("9", NotifDisplay.badgeLabel(9))
         assertEquals("9+", NotifDisplay.badgeLabel(10))
         assertEquals("9+", NotifDisplay.badgeLabel(250))
+    }
+
+    // ---- snippet: the client's mirror of notif_snippet (migration 0010) ----
+    //
+    // These exist because the server-side cap only ever covers rows written AFTER 0010 runs.
+    // Everything already in the table, and everything written while 0010 is still unapplied, is
+    // cleaned here or not at all -- and this is the one function both the inbox card and the push
+    // tray read, so a gap here shows up on a parent's lock screen.
+
+    @Test
+    fun `the toolbar's markdown markers never reach the tray`() {
+        // CreateTaskScreen's formatting toolbar writes these literally into tugas.instruksi. The
+        // system tray parses no markdown, so without stripping, a parent's phone shows the markers.
+        // A raw string with real line breaks, because that is exactly the shape the column holds.
+        val raw = """
+            ### Langkah 1
+            - Ajak anak **memegang** sendok
+            1. Ulangi `tiga` kali
+        """.trimIndent()
+        assertEquals(
+            "Langkah 1 Ajak anak memegang sendok Ulangi tiga kali",
+            NotifDisplay.snippet(raw),
+        )
+    }
+
+    @Test
+    fun `every run of whitespace collapses, newlines included`() {
+        // A notification body is one line and a parent's note is not.
+        // Built from named parts rather than escapes, so what each character is stays visible.
+        val nl = System.lineSeparator()
+        val tab = "\t"
+        assertEquals("satu dua tiga", NotifDisplay.snippet("  satu$nl$nl dua $tab$tab tiga  "))
+    }
+
+    @Test
+    fun `a long body is cut with an ellipsis and never exceeds the cap`() {
+        val long = "a".repeat(500)
+        val out = NotifDisplay.snippet(long)!!
+        assertEquals(NotifDisplay.MAX_BODY_CHARS, out.length)
+        assertTrue(out.endsWith("…"))
+        // The cap is 120 to match notif_snippet's default, so a row written by the trigger and a
+        // row cleaned here come out the same length rather than subtly different.
+        assertEquals(120, NotifDisplay.MAX_BODY_CHARS)
+    }
+
+    @Test
+    fun `text at exactly the cap is left alone`() {
+        val exact = "b".repeat(NotifDisplay.MAX_BODY_CHARS)
+        assertEquals(exact, NotifDisplay.snippet(exact))
+    }
+
+    @Test
+    fun `nothing worth saying becomes null rather than an empty line`() {
+        assertNull(NotifDisplay.snippet(null))
+        assertNull(NotifDisplay.snippet(""))
+        assertNull(NotifDisplay.snippet("  " + System.lineSeparator() + "\t "))
+        // Markers with nothing after them are still nothing.
+        assertNull(NotifDisplay.snippet("###   "))
+    }
+
+    @Test
+    fun `a task notification body is both cleaned and capped on the way to the card`() {
+        // The end-to-end path: this is what PushPayload.parse feeds to the tray as well.
+        //
+        // Markers sit at LINE STARTS here, which is the only place either implementation strips
+        // them -- the SQL uses the `n` flag and this uses MULTILINE, both deliberately. A `###`
+        // in the middle of a sentence is ordinary text and stays. My first version of this test
+        // put one mid-line and demanded it vanish, which was the test being wrong, not the rule.
+        val instruksi = """
+            ### Latihan Sensori
+            - Ajak anak **menyentuh** kain
+        """.trimIndent() + " panjang".repeat(40)
+
+        val mapped = NotifDisplay.from(notif(type = "tugas_baru", body = instruksi))
+        val body = mapped.body!!
+
+        assertEquals(NotifDisplay.MAX_BODY_CHARS, body.length)
+        assertTrue(body.startsWith("Latihan Sensori Ajak anak menyentuh kain"))
+        assertFalse(body.contains("###"))
+        assertFalse(body.contains("**"))
+        assertFalse(body.contains(System.lineSeparator()))
+    }
+
+    @Test
+    fun `a marker in the middle of a sentence is ordinary text`() {
+        // The other side of the same rule, so nobody "fixes" the regex into stripping everywhere
+        // and silently mangles a note that legitimately contains an asterisk or a hash.
+        assertEquals("nilai 5 - 3 = 2", NotifDisplay.snippet("nilai 5 - 3 = 2"))
+        assertEquals("lihat bab #3", NotifDisplay.snippet("lihat bab #3"))
+    }
+
+    @Test
+    fun `a runaway title is capped without losing the fallback for a blank one`() {
+        val huge = NotifDisplay.from(notif(type = "tugas_baru", title = "N".repeat(300)))
+        assertEquals(NotifDisplay.MAX_TITLE_CHARS, huge.title.length)
+
+        // snippet() returns null for a blank title, which is exactly when the fallback takes over.
+        // Pinned because that replaced an explicit trim/ifBlank pair.
+        assertEquals("Tugas rumah baru", NotifDisplay.from(notif(type = "tugas_baru", title = "   ")).title)
+    }
+
+    @Test
+    fun `cleaning does not resurrect the filler sentence as a body`() {
+        // bodyLineOf drops CATATAN_RUTIN, and snippet runs first -- so a padded or newline-wrapped
+        // copy of the filler must still be dropped rather than sneaking through as "typed".
+        assertNull(NotifDisplay.from(notif(body = "  " + CATATAN_RUTIN + System.lineSeparator())).body)
     }
 }

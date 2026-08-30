@@ -7,14 +7,21 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 
 ### ✅ Built / Completed
 *   **Infrastructure:** Supabase project setup, database schema, RLS policies, and storage bucket
-    configurations. **Migrations `0001` through `0009` are applied; `0010` and `0011` are written
+    configurations. **Migrations `0001` through `0009` are applied; `0010`, `0011` and `0012` are written
     but NOT yet run**, and as of 2026-08-30 that is a fact the database itself records rather than
     a claim in this file: `supabase_migrations.schema_migrations` exists and holds all nine. Query
-    it instead of trusting this paragraph. **`0011` must be run after `0010`** -- it is a
-    `create or replace` of the same `on_balasan_insert` function, so running it alone would
-    revert `0010`'s naming work. Note that no migration file records itself in
-    `schema_migrations`; the first nine were backfilled by hand, and `0010`/`0011` need the same. The old duplicate-`0005` collision is resolved
-    (`0007_presensi_unik_harian`).
+    it instead of trusting this paragraph.
+
+    **Run the three pending ones in order: `0010`, then `0011`, then `0012`.** The order is
+    load-bearing in both places. `0011` is a `create or replace` of the same `on_balasan_insert`
+    that `0010` last defines, so running it first would be silently undone by `0010`; and `0012`
+    calls `notif_snippet`, which only `0010` creates. `0012` additionally needs the **pg_cron
+    extension enabled** beforehand — Dashboard → Database → Extensions is the reliable route on
+    Supabase.
+
+    No migration file records itself in `schema_migrations`; the first nine were backfilled by
+    hand, and all three pending ones need the same treatment. The old duplicate-`0005` collision is
+    resolved (`0007_presensi_unik_harian`).
 *   **Authentication:** Phone Number + PIN login flow mapped to Supabase Auth. Role-based routing (Admin, Parent, Volunteer).
 *   **Admin Features:**
     *   Create Parent/Volunteer accounts (via `noSessionClient` to preserve admin session).
@@ -56,8 +63,10 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
     applied, and both Vault secrets are correct — but **no push has been sent or received**, because
     nothing downstream of sign-in has been tested. Both bells still refresh only on route entry, so
     a notification arriving while the app is open is not seen until the user navigates.
-    The `notif_type` values `'presensi'`, `'tugas_missed'` and `'tugas_reminder'` remain declared
-    but unused — no trigger writes them, and the UI renders any of them generically.
+    `'tugas_reminder'` is now written by the daily `pengingat-tugas` cron job (migration `0012`,
+    **not yet run**) and has its own `NotifType`, icon and tests. The `notif_type` values
+    `'presensi'` and `'tugas_missed'` remain declared but unused — no trigger writes them, and the
+    UI renders them generically on purpose.
 
 
 ### ❌ Not Built / Deferred
@@ -287,6 +296,70 @@ child so `is_parent_of` admits their parent.
     of this limitation that remains true.
 
 ## Change Log
+
+### [2026-08-30] - Closing the Text-Overflow Gaps, and a Daily Reminder That Finally Writes an Unused Enum Value
+* **The text-cap sweep in Part 1 missed three `Text` composables, and I found them by auditing
+    rather than by guessing.** A script over every `maxLines` in `ui/` turned up six without an
+    `overflow`; three were false positives (`OutlinedTextField` needs none, and `RichTextDisplay`
+    already sets it internally). The three real ones were all in `TemplateListScreen` — template
+    name, template title, and the teaching-aid label row. Without `overflow` Compose clips
+    mid-glyph, so a long name ended in half a letter with nothing to say it had been cut.
+* **The heads-up popup was uncapped, and the fix could not wait for the database.** `notif_snippet`
+    in migration `0010` caps and strips markers server-side, but `0010` is still unapplied, and its
+    own footer says rows written before it are deliberately never backfilled. So the server cap can
+    only ever cover rows written after it runs.
+* **`NotifDisplay.snippet` is therefore a deliberate second implementation of a server-side rule,**
+    which is normally a mistake. It is right here because it is the only thing that cleans rows this
+    client did not write: pre-`0010` rows, and every row written while `0010` is pending. It is also
+    the single point both surfaces read — the inbox card through `from`, and the push tray through
+    `PushPayload.parse` — so one function fixes both. Without it `BigTextStyle.bigText` expands a
+    500-character instruction into a wall of text in the notification shade.
+* **What it strips, and what it deliberately does not.** Block markers (`###`, `- `, `1. `) only at
+    **line starts**, matching the SQL's `n` flag; inline `**`, `__`, backtick anywhere; every
+    whitespace run collapsed. A `#` or `-` mid-sentence is ordinary text and survives — "nilai 5 - 3
+    = 2" must not become "nilai 5 3 = 2". Both halves of that rule now have a test.
+* **My first version of the end-to-end test was wrong and the suite caught it.** I put `###` in the
+    middle of a single-line fixture and asserted it vanished. It does not, correctly — the rule is
+    line-leading only. The fixture became a multi-line raw string, which is also the shape the
+    column actually holds, and a second test now pins the mid-sentence case from the other side.
+* **`tugas_reminder` gets its own `NotifType`.** The catch-all `LAINNYA`'s KDoc literally names a
+    "`tugas_reminder` cron job" as the hypothetical it exists for. Now that one writes the value,
+    leaving it generic would waste the distinction: `TUGAS_BARU` answers "something arrived" and
+    `TUGAS_REMINDER` answers "something is due now", and a parent scanning a list needs to tell a
+    task they have already seen from one they have not. Same colours, different glyph — the colour
+    says "about a task", the alarm says "due now".
+* **Migration `0012` writes it, and the duplicated recurrence logic is the interesting part.**
+    `RecurrenceRule` already answers "does this task fall on this day" in Kotlin with 16 tests
+    behind it, and `tugas_jatuh_pada` is a second implementation that can drift. It is still the
+    right trade because the two are not the same size: the Kotlin has to **enumerate a range** —
+    walking days, clamping short months, anchoring an interval so the cadence never slips — and a
+    cron job only ever asks about **one day**, which collapses all of that into a per-type
+    predicate. Fifteen lines against a hundred. Every branch names the Kotlin it mirrors.
+* **Three details in that SQL that are easy to get wrong.** `least()` ignores nulls in Postgres,
+    which is exactly the "no limit from that side" behaviour `effectiveEnd` gets from its when/else
+    chain. `stopped_at` is exclusive, so the last live day is `stopped_at - 1`. And the interval
+    branch is a `CASE` rather than `interval >= 1 and ... % interval = 0`, because Postgres does not
+    promise to evaluate `AND` left to right and the second half divides by it.
+* **"Today" is computed in WITA, not UTC,** or a job running at 23:00 UTC would ask about tomorrow's
+    tasks for half the people it is meant to remind. The cron expression carries the offset
+    (`0 23 * * *` = 07:00 Makassar); the function carries the date arithmetic.
+* **The job is idempotent within a day** — it skips any task that already has a `tugas_reminder`
+    written today, compared in WITA. That is what makes it safe to run by hand while testing, and
+    safe for pg_cron to retry after a failure. The migration ends with the queries to prove it: run
+    it twice, the second must return 0.
+* **`tugas_missed` deliberately not built.** A second job telling a parent they failed yesterday is
+    a different product decision from a reminder, and it is the kind that makes people turn
+    notifications off.
+* **Verified:** `:app:testDebugUnitTest` + `:app:assembleDebug`, **333 tests (from 322), 0 failures,
+    zero compiler warnings**. The four snippet rules were each checked by removing them and
+    confirming the intended tests failed. APK installed and cold-started on `emulator-5554` with no
+    fatal exception.
+* **Not verified, and this time it includes the whole migration.** `0012` has never been run — I
+    cannot reach the database — so `tugas_jatuh_pada` has executed exactly zero times. Its SQL is
+    reasoned against the Kotlin line by line, and that is not the same as having run. Neither is
+    the cron schedule, the pg_cron extension being enabled, or the reminder appearing in a tray.
+* **Order now matters across three migrations:** `0010`, then `0011`, then `0012`. `0012` calls
+    `notif_snippet`, which `0010` defines.
 
 ### [2026-08-30] - Notifications That Arrive Somewhere, and Triage That Tells the Truth
 * **A task notification opened nothing, and the data had been there all along.** `on_tugas_insert`

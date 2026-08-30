@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Feedback
 import androidx.compose.material.icons.filled.Notifications
@@ -341,6 +342,11 @@ private fun NotificationCard(
 
 private fun iconFor(type: NotifType): Triple<ImageVector, Color, Color> = when (type) {
     NotifType.TUGAS_BARU -> Triple(Icons.AutoMirrored.Filled.Assignment, TaskBoxBg, TaskTint)
+    // Same colours as TUGAS_BARU, different glyph, and both halves are deliberate: the colour says
+    // "this is about a task" and the alarm says "it is due now, you have seen it before". The
+    // warning above about two branches sharing an icon is about the glyph, which is what carries
+    // the meaning here.
+    NotifType.TUGAS_REMINDER -> Triple(Icons.Filled.Alarm, TaskBoxBg, TaskTint)
     // Deliberately not Chat: that is FEEDBACK_BALASAN's glyph below, and two branches drawing the
     // same icon invite a later "simplification" that merges two kinds which are not the same thing.
     NotifType.FEEDBACK_BARU -> Triple(Icons.Filled.Feedback, NoteBoxBg, NoteTint)

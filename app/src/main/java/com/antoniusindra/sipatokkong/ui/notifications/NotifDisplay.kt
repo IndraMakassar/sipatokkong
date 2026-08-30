@@ -6,6 +6,7 @@ import com.antoniusindra.sipatokkong.data.model.Notification
 
 /** `notif_type` values, as the strings Postgres actually sends. */
 private const val TYPE_TUGAS_BARU = "tugas_baru"
+private const val TYPE_TUGAS_REMINDER = "tugas_reminder"
 private const val TYPE_FEEDBACK_BARU = "feedback_baru"
 private const val TYPE_FEEDBACK_BALASAN = "feedback_balasan"
 
@@ -23,6 +24,17 @@ private const val ENTITY_TUGAS = "tugas"
  */
 enum class NotifType {
     TUGAS_BARU,
+
+    /**
+     * The morning nudge for a task due today and not yet done, written by the `pengingat-tugas`
+     * cron job (migration `0012`).
+     *
+     * A separate kind from [TUGAS_BARU] because they answer different questions -- "something
+     * arrived" versus "something is due now" -- and a parent scanning a list needs to tell a task
+     * they have already seen from one they have not.
+     */
+    TUGAS_REMINDER,
+
     FEEDBACK_BARU,
     FEEDBACK_BALASAN,
 
@@ -30,7 +42,9 @@ enum class NotifType {
      * Everything else, drawn with a plain bell.
      *
      * The catch-all exists so the inbox keeps working when the database starts writing something
-     * this build has never heard of -- a `tugas_reminder` cron job, say. Dropping unrecognised rows
+     * this build has never heard of. It was written with `tugas_reminder` as the example; that one
+     * now has its own kind above, and `tugas_missed` and `presensi` remain declared and unwritten.
+     * Dropping unrecognised rows
      * would mean someone silently never sees a kind added after their APK shipped, which is a
      * worse failure than a generic icon because nothing on screen would hint that it happened.
      */
@@ -95,6 +109,7 @@ object NotifDisplay {
 
     /** Fallback titles, used only when a row arrives with nothing usable in `title`. */
     private const val FALLBACK_TITLE_TUGAS = "Tugas rumah baru"
+    private const val FALLBACK_TITLE_REMINDER = "Pengingat tugas hari ini"
 
     /**
      * A last resort, and no longer a mirror of what the trigger writes.
@@ -117,6 +132,7 @@ object NotifDisplay {
      */
     fun kindOf(type: String?): NotifType = when (type) {
         TYPE_TUGAS_BARU -> NotifType.TUGAS_BARU
+        TYPE_TUGAS_REMINDER -> NotifType.TUGAS_REMINDER
         TYPE_FEEDBACK_BARU -> NotifType.FEEDBACK_BARU
         TYPE_FEEDBACK_BALASAN -> NotifType.FEEDBACK_BALASAN
         else -> NotifType.LAINNYA
@@ -167,7 +183,10 @@ object NotifDisplay {
         return NotificationItem(
             id = row.id,
             type = kind,
-            title = row.title?.trim().orEmpty().ifBlank { fallbackTitleFor(kind) },
+            // snippet() returns null for a blank or marker-only title, which is exactly when the
+            // fallback should take over -- so this replaces the old trim/ifBlank pair rather than
+            // sitting in front of it.
+            title = snippet(row.title, MAX_TITLE_CHARS) ?: fallbackTitleFor(kind),
             body = bodyLineOf(row.body),
             createdAt = row.createdAt,
             isRead = row.isRead,
@@ -211,10 +230,74 @@ object NotifDisplay {
      * card whose ripple is deliberately disabled.
      */
     private fun bodyLineOf(raw: String?): String? =
-        raw?.trim()?.takeIf { hasTypedNote(it) }
+        snippet(raw, MAX_BODY_CHARS)?.takeIf { hasTypedNote(it) }
+
+    /**
+     * One line, marker-free, bounded -- the client's mirror of `notif_snippet` from migration 0010.
+     *
+     * A deliberate second implementation of a server-side rule, which is normally a mistake. Three
+     * things make it the right call here, and all three are about rows this client did not write:
+     *
+     *  1. `0010` has not been applied yet, so nothing caps anything today.
+     *  2. Rows written *before* `0010` keep their raw bodies forever -- that migration's own footer
+     *     says they are deliberately not backfilled. Only the client can clean those.
+     *  3. `on_tugas_insert` before `0010` writes `body = new.judul` with no cap at all, and
+     *     `tugas.instruksi` is plain text edited through a formatting toolbar that stores literal
+     *     `###`, `**` and `- ` markers (see CreateTaskScreen). The system tray parses no markdown,
+     *     so without this a parent's phone shows `### Langkah 1 - **pegang** sendok` verbatim.
+     *
+     * This is the single place both surfaces read: the inbox card goes through [from], and so does
+     * the push tray via `PushPayload.parse`. Capping here is what stops `BigTextStyle.bigText`
+     * expanding a 500-character instruction into a wall of text in the notification shade.
+     *
+     * Kept byte-for-byte equivalent to the SQL: line-leading block markers, then inline emphasis,
+     * then every whitespace run collapsed, then trim; empty becomes null so the caller can drop the
+     * line rather than print an empty one.
+     */
+    fun snippet(src: String?, maxLen: Int = MAX_BODY_CHARS): String? {
+        val cleaned = (src ?: "")
+            .replace(BLOCK_MARKER, "")
+            .replace(INLINE_MARKER, "")
+            .replace(WHITESPACE_RUN, " ")
+            .trim()
+        return when {
+            cleaned.isEmpty() -> null
+            // maxLen - 1 leaves room for the ellipsis, so the result never exceeds maxLen. The SQL
+            // does the same arithmetic for the same reason.
+            cleaned.length > maxLen -> cleaned.take(maxLen - 1) + "…"
+            else -> cleaned
+        }
+    }
+
+    /** `### `, `- `, `* `, `+ `, `1. ` at the start of any line. MULTILINE is what makes `^` mean
+     *  "line start" rather than "string start", which is the only place these markers appear. */
+    private val BLOCK_MARKER = Regex("""^[ \t]*(#{1,6}|[-*+]|\d+\.)[ \t]+""", RegexOption.MULTILINE)
+
+    /** Inline emphasis, which the tray renders literally. */
+    private val INLINE_MARKER = Regex("""\*\*|__|`""")
+
+    /** Newlines included: a notification body is one line, and a parent's note is not. */
+    private val WHITESPACE_RUN = Regex("""\s+""")
+
+    /**
+     * 120 characters, the same default `notif_snippet` carries, so a row written by the trigger and
+     * a row cleaned here come out identical rather than subtly different lengths.
+     */
+    const val MAX_BODY_CHARS = 120
+
+    /**
+     * 80, and a guard rather than the main event.
+     *
+     * After `0010` a title is two names plus about 24 characters of fixed phrase
+     * ("X memberi tugas untuk Y"), so a real one lands near 45. This only bites on data that is
+     * already wrong -- a name field holding a paragraph -- and stops it from pushing the tray
+     * title into a state the system truncates without an ellipsis of its own.
+     */
+    const val MAX_TITLE_CHARS = 80
 
     private fun fallbackTitleFor(kind: NotifType): String = when (kind) {
         NotifType.TUGAS_BARU -> FALLBACK_TITLE_TUGAS
+        NotifType.TUGAS_REMINDER -> FALLBACK_TITLE_REMINDER
         NotifType.FEEDBACK_BARU -> FALLBACK_TITLE_FEEDBACK_BARU
         NotifType.FEEDBACK_BALASAN -> FALLBACK_TITLE_BALASAN
         NotifType.LAINNYA -> FALLBACK_TITLE_LAINNYA
