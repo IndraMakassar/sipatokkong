@@ -35,6 +35,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.core.app.NotificationManagerCompat
+import androidx.compose.ui.platform.LocalContext
+import com.antoniusindra.sipatokkong.core.push.PushPayload
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -69,6 +72,20 @@ fun FeedbackThreadScreen(
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
+    // Clears the tray card for this thread on the way in.
+    //
+    // setAutoCancel(true) already covers arriving BY the notification. This covers the
+    // other door -- reaching here from the inbox or the home screen -- where the card
+    // would otherwise sit there. Now that messages accumulate into a single card, one
+    // left behind would keep growing with replies the reader has already seen.
+    //
+    // In the composable rather than the ViewModel: the ViewModels here stay free of
+    // Android framework types, and a notification is a view concern.
+    val trayContext = LocalContext.current
+    LaunchedEffect(feedbackId) {
+        NotificationManagerCompat.from(trayContext).cancel(PushPayload.trayIdForEntity(feedbackId))
+    }
+
     LaunchedEffect(feedbackId) { viewModel.load(feedbackId) }
 
     Scaffold(

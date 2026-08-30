@@ -61,7 +61,9 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
     carrying the volunteer's and child's names — so `0010` is confirmed working, not merely applied.
     Tapping one from a cold start opens the right screen; that path crashed until the same day and
     the fix is in the Change Log. Both bells still refresh only on route entry, so a notification
-    arriving while the app is open is not seen until the user navigates.
+    arriving while the app is open is not seen until the user navigates. In the tray, notifications
+    now collapse per entity: every message in one feedback thread shares a card and accumulates into
+    a conversation, and every reminder about one task replaces the last.
     `'tugas_reminder'` is written by the daily `pengingat-tugas` cron job and has its own
     `NotifType`, icon and tests. `0012` (applied) sends it on the day an occurrence falls; `0013`
     (**written, not yet run**) adds H-3 and H-1 for one-shot tasks only. **Neither has ever fired
@@ -298,6 +300,59 @@ child so `is_parent_of` admits their parent.
     of this limitation that remains true.
 
 ## Change Log
+
+### [2026-08-30] - Three Replies in One Thread Are Now One Tray Card, Not Three
+* **The symptom, from a device:** three messages in one feedback thread produced three separate
+    cards in the phone's notification tray. They are one conversation and belong in one card —
+    which is what `MessagingStyle` exists for, and the app was already using it.
+* **Two causes, both one-liners, and the first is the whole fix.**
+    `PushPayload.notificationIdFor` preferred `notification_id` — unique per `notifications` row —
+    over the entity id, so every reply claimed its own tray slot. The thread id was already in hand
+    (`NotifTarget.FeedbackThread.feedbackId` **is** `entity_id`) and the function already computed
+    it, merely as a fallback. Inverting that precedence collapses a conversation into one slot.
+* **`notificationId` keeps a real purpose as the fallback:** a row that points at no entity relates
+    to no other row, so it has earned its own slot. Merging those would hide one behind another for
+    no reason.
+* **Task reminders collapse too, and there it means replace rather than merge.** A reminder is not
+    a message from a person so it stays `PushStyle.EXPANDABLE`; H-3 → H-1 → today now leave one card
+    saying where the task stands, rather than three saying where it stood on three mornings.
+* **The second cause was that nothing read the card already on screen.** `MessagingStyle` was
+    rebuilt from scratch with exactly one `addMessage`. It now reads back the posted notification
+    via `NotificationManagerCompat.getActiveNotifications()` +
+    `MessagingStyle.extractMessagingStyleFromNotification`, appends, and caps at six — the system
+    renders only the last handful anyway, and uncapped the notification's extras would grow for the
+    life of a long thread.
+* **That read is wrapped in `runCatching` on purpose.** It touches a system service that can throw
+    or return nothing on some OEM builds, and the extractor returns null for anything not built with
+    MessagingStyle. Every one of those degrades to "start a fresh conversation" — today's behaviour.
+    None may cost the user a notification.
+* **Deliberately did NOT set `setOnlyAlertOnce`.** A merged card must still buzz on each new
+    message. Silently updating a card nobody is looking at would be worse than the three cards being
+    replaced.
+* **Opening the conversation in-app now clears its card.** `setAutoCancel(true)` only covered
+    arriving *by* the notification; reaching the thread from the inbox or the home screen left the
+    card sitting there — and now that messages accumulate, a left-behind card would keep growing
+    with replies already read. Added to `FeedbackThreadScreen` and `TaskDetailScreen`, in the
+    composable rather than the ViewModel, since the ViewModels here stay free of Android types.
+* **Both sides derive the slot from one shared `PushPayload.trayIdForEntity`**, and a test pins that
+    they agree. A cancel computed differently from the post would miss silently, leaving exactly the
+    stale card it exists to remove — the kind of bug that looks like nothing at all.
+* **The `PendingIntent` request code is the same id, and that is now right by construction rather
+    than by care.** Every message in one conversation routes to the same destination, so
+    `FLAG_UPDATE_CURRENT` refreshes an intent that was already identical. The old comment warning
+    about shared request codes handing back one another's extras was rewritten to say so.
+* **`PushPayloadTest`'s `two different rows do not collide` asserted the behaviour being removed.**
+    Rewritten rather than deleted, keeping a note of what it used to claim and why that changed —
+    it *was* correct, for a design that produced three cards.
+* **Verified:** 338 tests (from 333), 0 failures, zero warnings. The five new tray-slot tests were
+    each confirmed to fail with the old precedence restored. APK installed and cold-started on
+    `emulator-5554` through a `feedback_thread` deep link with no crash, which exercises the new
+    cancel effect.
+* **NOT verified, and it is the headline behaviour:** the merge itself. Proving it needs two real
+    pushes arriving at a signed-in device, and the phone was disconnected by then. Also unverified:
+    that the cancel actually clears a card, for the same reason. The accumulation and the cancel are
+    Android glue with no Robolectric in this repo, so they carry no unit tests either — the pure
+    part was factored out as far as it honestly goes, and the rest is a device check.
 
 ### [2026-08-30] - Reminders Before a One-Shot Task Is Due, and What "Deadline" Actually Means Here
 * **Asked whether a "deadline approaching" reminder existed, the answer was no.** `0012` reminds on

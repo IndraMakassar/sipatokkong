@@ -94,26 +94,43 @@ object PushPayload {
     }
 
     /**
-     * The tray slot this push occupies.
+     * The tray slot this push occupies -- keyed on the **conversation**, not the row.
      *
-     * Stable for a given notification row, so FCM re-delivering the same row replaces the entry
-     * instead of stacking a second identical one. Falls back through the entity id to a constant, so
-     * a payload missing both still posts somewhere rather than throwing.
+     * This used to prefer `notification_id`, which is unique per `notifications` row, so three
+     * replies in one feedback thread produced three separate cards in the tray. One thread is one
+     * conversation and belongs in one card; `PushNotifier` accumulates the messages into it.
      *
-     * The fallback reads the id out of every target rather than only the feedback one. As an
-     * `as? FeedbackThread` it silently skipped task rows, so two task pushes arriving without a
-     * `notification_id` shared [FALLBACK_TRAY_ID] and the second replaced the first in the tray --
-     * a `when` over the sealed type makes that omission a compile error the next time a target is
-     * added.
+     * Task rows collapse the same way, and there it means the newer reminder *replaces* the older
+     * rather than joining it -- a reminder is not a message from a person, so it keeps the
+     * expandable style. For H-3 -> H-1 -> today that is the behaviour you want: one card saying
+     * where the task stands now, not three saying where it stood on three mornings.
+     *
+     * `notificationId` survives as the fallback, and its remaining purpose is real: a row that
+     * points at nothing relates to no other row, so it has earned its own slot. [FALLBACK_TRAY_ID]
+     * is the last resort for a payload carrying neither.
+     *
+     * The `when` is over the sealed type on purpose. As an `as? FeedbackThread` it once silently
+     * skipped task rows; exhaustiveness makes the same omission a compile error the next time a
+     * target is added.
      */
     fun notificationIdFor(message: PushMessage?): Int {
-        val seed = message?.notificationId ?: when (val target = message?.target) {
+        val seed = when (val target = message?.target) {
             is NotifTarget.FeedbackThread -> target.feedbackId
             is NotifTarget.TaskDetail -> target.tugasId
             NotifTarget.None, null -> null
-        } ?: return FALLBACK_TRAY_ID
-        return seed.hashCode()
+        } ?: message?.notificationId ?: return FALLBACK_TRAY_ID
+        return trayIdForEntity(seed)
     }
+
+    /**
+     * The tray slot an entity owns.
+     *
+     * Shared so that the screen which *opens* a conversation can clear the card for it. Both sides
+     * deriving the slot from the same one-liner is what stops them drifting -- a cancel against a
+     * differently-computed id would fail silently, leaving exactly the stale card this exists to
+     * remove.
+     */
+    fun trayIdForEntity(entityId: String): Int = entityId.hashCode()
 
     private const val FALLBACK_TRAY_ID = 1
 

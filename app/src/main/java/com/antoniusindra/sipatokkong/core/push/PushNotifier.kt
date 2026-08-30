@@ -74,8 +74,11 @@ object PushNotifier {
         }
         val pending = PendingIntent.getActivity(
             context,
-            // Same id as the tray slot: with FLAG_UPDATE_CURRENT, a shared request code would make
-            // every notification hand back one another's extras.
+            // Same id as the tray slot, and now that the slot is keyed on the entity rather than
+            // the row, that is exactly right rather than merely careful: every message in one
+            // conversation routes to the same destination, so FLAG_UPDATE_CURRENT refreshes an
+            // intent that was already identical. Two conversations still get two request codes,
+            // which is what stops one card handing back the other's extras.
             trayId,
             intent,
             // FLAG_IMMUTABLE is mandatory on API 31+ — getActivity throws without it.
@@ -115,15 +118,22 @@ object PushNotifier {
                     .setImportant(true)
                     .build()
 
-                base.setStyle(
-                    NotificationCompat.MessagingStyle(me)
-                        .setGroupConversation(false)
-                        .addMessage(
-                            NotificationCompat.MessagingStyle.Message(
-                                message.body, System.currentTimeMillis(), sender,
-                            )
-                        )
+                // Three replies in one thread used to be three cards. They are one conversation,
+                // so they are one card -- which needs the messages already on screen, because a
+                // Notification is rebuilt from scratch every time and nothing remembers them.
+                //
+                // Capped rather than unbounded: the system renders only the last handful anyway,
+                // and without this the notification's extras grow for the life of a long thread.
+                val baru = NotificationCompat.MessagingStyle.Message(
+                    message.body, System.currentTimeMillis(), sender,
                 )
+                val style = NotificationCompat.MessagingStyle(me)
+                style.isGroupConversation = false
+                (previousMessages(context, trayId) + baru)
+                    .takeLast(MAX_TRAY_MESSAGES)
+                    .forEach { style.addMessage(it) }
+
+                base.setStyle(style)
                     // Not redundant with the Person icon: androidx Person icons are only honoured
                     // from API 28, and minSdk here is 27. On that one level this is what shows.
                     .setLargeIcon(avatar)
@@ -155,4 +165,35 @@ object PushNotifier {
         runCatching { manager.notify(trayId, notification) }
             .onFailure { Log.w(PUSH_LOG_TAG, "notify failed: ${it.message}") }
     }
+    /**
+     * The messages already showing in this tray slot, oldest first, or empty when there are none.
+     *
+     * Only notifications this app posted and that are still on screen come back -- so if the parent
+     * swiped the card away, the next message correctly starts a fresh conversation rather than
+     * resurrecting one they dismissed.
+     *
+     * `runCatching` because this touches a system service: it can throw or return nothing on some
+     * OEM builds, and `extractMessagingStyleFromNotification` returns null for anything not built
+     * with MessagingStyle. Every one of those degrades to "start a new conversation", which is
+     * today's behaviour. None of them may cost the user a notification.
+     */
+    private fun previousMessages(
+        context: Context,
+        trayId: Int,
+    ): List<NotificationCompat.MessagingStyle.Message> = runCatching {
+        NotificationManagerCompat.from(context).activeNotifications
+            .firstOrNull { it.id == trayId }
+            ?.notification
+            ?.let { NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(it) }
+            ?.messages
+    }.getOrNull().orEmpty()
+
+    /**
+     * How many messages a merged card keeps.
+     *
+     * Six because Android only renders the last few in an expanded MessagingStyle; carrying more
+     * would bloat the notification bundle to show nothing extra.
+     */
+    private const val MAX_TRAY_MESSAGES = 6
+
 }

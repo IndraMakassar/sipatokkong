@@ -223,10 +223,68 @@ class PushPayloadTest {
     }
 
     @Test
-    fun `two different rows do not collide`() {
+    fun `every reply in one thread lands in the same tray slot`() {
+        // This test used to be `two different rows do not collide` and asserted the opposite, back
+        // when the slot was keyed on `notification_id`. That is precisely what produced three cards
+        // for three replies to one feedback. One thread is one conversation and belongs in one
+        // card; PushNotifier accumulates the messages into it.
         val a = PushPayload.parse(feedbackPush() + ("notification_id" to "8f14e45f-ea1e-4a1b-9c2d-000000000001"))
         val b = PushPayload.parse(feedbackPush() + ("notification_id" to "8f14e45f-ea1e-4a1b-9c2d-000000000002"))
+        assertEquals(PushPayload.notificationIdFor(a), PushPayload.notificationIdFor(b))
+    }
+
+    @Test
+    fun `two different threads keep separate slots`() {
+        // The other half of the rule. Merging by entity must not become merging by kind.
+        val a = PushPayload.parse(feedbackPush(entityId = "fb-1"))
+        val b = PushPayload.parse(feedbackPush(entityId = "fb-2"))
         assertNotEquals(PushPayload.notificationIdFor(a), PushPayload.notificationIdFor(b))
+    }
+
+    @Test
+    fun `every reminder about one task lands in the same slot`() {
+        // H-3, H-1 and today are three rows about one task. Collapsed, the newest replaces the
+        // older -- a reminder is not a message from a person, so it keeps the expandable style and
+        // the card says where the task stands now rather than where it stood on three mornings.
+        val jauh = PushPayload.parse(
+            push("notification_id" to "n-1", "type" to "tugas_reminder",
+                 "title" to "Tugas 3 hari lagi untuk Andi",
+                 "entity_table" to "tugas", "entity_id" to "t-1")
+        )
+        val dekat = PushPayload.parse(
+            push("notification_id" to "n-2", "type" to "tugas_reminder",
+                 "title" to "Tugas hari ini untuk Andi",
+                 "entity_table" to "tugas", "entity_id" to "t-1")
+        )
+        assertEquals(PushPayload.notificationIdFor(jauh), PushPayload.notificationIdFor(dekat))
+    }
+
+    @Test
+    fun `a row pointing at nothing keeps its own slot`() {
+        // The surviving purpose of notificationId. Two rows that relate to no entity relate to
+        // nothing at all, so merging them would hide one behind the other for no reason.
+        val a = PushPayload.parse(push("notification_id" to "n-1", "type" to "presensi"))
+        val b = PushPayload.parse(push("notification_id" to "n-2", "type" to "presensi"))
+        assertNotEquals(PushPayload.notificationIdFor(a), PushPayload.notificationIdFor(b))
+    }
+
+    @Test
+    fun `the entity outranks the row id`() {
+        // Guards the ORDER inside notificationIdFor, which is the entire change. Put the row id
+        // first again and this is the test that fails: the two rows below differ only there.
+        val a = PushPayload.parse(feedbackPush() + ("notification_id" to "n-1"))
+        val b = PushPayload.parse(feedbackPush() + ("notification_id" to "n-2"))
+        assertEquals(PushPayload.trayIdForEntity("fb-1"), PushPayload.notificationIdFor(a))
+        assertEquals(PushPayload.trayIdForEntity("fb-1"), PushPayload.notificationIdFor(b))
+    }
+
+    @Test
+    fun `the screen and the tray agree on which slot to clear`() {
+        // FeedbackThreadScreen cancels PushPayload.trayIdForEntity(feedbackId) when it opens. If
+        // that ever stopped matching what the notifier posted under, the cancel would silently miss
+        // and the stale card it exists to remove would stay on screen.
+        val posted = PushPayload.notificationIdFor(PushPayload.parse(feedbackPush(entityId = "fb-7")))
+        assertEquals(PushPayload.trayIdForEntity("fb-7"), posted)
     }
 
     @Test
