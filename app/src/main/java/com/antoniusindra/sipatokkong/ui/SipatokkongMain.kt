@@ -2,6 +2,7 @@ package com.antoniusindra.sipatokkong.ui
 
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
+import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,6 +28,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.push.PUSH_LOG_TAG
+import kotlinx.coroutines.flow.first
 import com.antoniusindra.sipatokkong.data.model.UserRole
 import com.antoniusindra.sipatokkong.ui.admin.CreateAccountScreen
 import com.antoniusindra.sipatokkong.ui.admin.CreateChildScreen
@@ -99,11 +102,43 @@ fun SipatokkongMain(
     // true } on every session change, so a push destination applied first would simply be wiped.
     // Running second means the push route lands on top of the role's home screen — which is also
     // the back behaviour we want: Back from the thread returns home, not to a blank stack.
+    // Waits for the NavHost to actually own a graph before navigating. That wait is the fix for a
+    // crash this shipped with: tapping a notification while the app was closed opened it for two
+    // seconds and killed it with "Navigation graph has not been set".
+    //
+    // The NavHost below composes only once `graphStart` is non-null, and its composition is where
+    // setGraph happens. On a cold start the order was: compose with graphStart still null so no
+    // NavHost exists, then effects run, then this one calls navigate() on a graphless controller.
+    //
+    // The obvious repair -- add `graphStart` as a key and return early while it is null -- was
+    // tried, shipped to a device, and DID NOT WORK. Two reasons, both worth recording because both
+    // are easy to talk yourself into:
+    //
+    //   1. Reading `graphStart` inside the coroutine reads the LIVE value, not the key the effect
+    //      was launched with. LaunchedEffect(resolved) assigns it during the same effect pass, so
+    //      by the time this body ran the guard already saw non-null while no NavHost had composed.
+    //   2. Even a composition-time snapshot would only be reasoning about effect ORDERING, and
+    //      whether NavHost installs its graph during composition or in an effect of its own is an
+    //      implementation detail of a library that is free to change it.
+    //
+    // currentBackStackEntryFlow settles both: it emits only once a graph is set and a destination
+    // is current, and emits immediately when that is already true. So this cannot run early no
+    // matter how the frames fall, and it costs nothing on the warm path.
+    //
+    // The warm path never had the bug -- a push tapped while the app is open arrives through
+    // onNewIntent, long after the graph exists.
     LaunchedEffect(pendingRoute, sessionState) {
         val route = pendingRoute ?: return@LaunchedEffect
         when (sessionState) {
             is SessionManager.State.SignedIn -> {
-                navController.navigate(route)
+                navController.currentBackStackEntryFlow.first()
+                // Defensive, and deliberately NOT the fix -- the wait above is. This route is built
+                // from server data (`entity_table`/`entity_id`, via NotifDisplay.targetOf), and a
+                // destination this build does not contain must not kill the app of someone who did
+                // nothing but tap a notification. Logged loudly, because a swallowed navigation is
+                // a silent dead tap: that is exactly how the wait above was found to be missing.
+                runCatching { navController.navigate(route) }
+                    .onFailure { Log.w(PUSH_LOG_TAG, "rute push '$route' gagal dibuka: ${it.message}") }
                 onRouteConsumed()
             }
             // Don't hold it: a push tapped while signed out must not ambush whoever logs in next,

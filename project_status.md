@@ -7,21 +7,18 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 
 ### ✅ Built / Completed
 *   **Infrastructure:** Supabase project setup, database schema, RLS policies, and storage bucket
-    configurations. **Migrations `0001` through `0009` are applied; `0010`, `0011` and `0012` are written
-    but NOT yet run**, and as of 2026-08-30 that is a fact the database itself records rather than
-    a claim in this file: `supabase_migrations.schema_migrations` exists and holds all nine. Query
-    it instead of trusting this paragraph.
+    configurations. **All migrations `0001` through `0012` are applied**, as of 2026-08-30 — and
+    that is a fact the database records rather than a claim in this file:
+    `supabase_migrations.schema_migrations` holds all twelve, and a probe query confirmed each
+    function landed (`notif_snippet`, the renamed trigger bodies, `tugas_jatuh_pada`,
+    `kirim_pengingat_tugas`, and the `pengingat-tugas` cron job). Query it instead of trusting
+    this paragraph.
 
-    **Run the three pending ones in order: `0010`, then `0011`, then `0012`.** The order is
-    load-bearing in both places. `0011` is a `create or replace` of the same `on_balasan_insert`
-    that `0010` last defines, so running it first would be silently undone by `0010`; and `0012`
-    calls `notif_snippet`, which only `0010` creates. `0012` additionally needs the **pg_cron
-    extension enabled** beforehand — Dashboard → Database → Extensions is the reliable route on
-    Supabase.
-
-    No migration file records itself in `schema_migrations`; the first nine were backfilled by
-    hand, and all three pending ones need the same treatment. The old duplicate-`0005` collision is
-    resolved (`0007_presensi_unik_harian`).
+    For any future migration that replaces a trigger function, order matters and is not obvious:
+    `0011` is a `create or replace` of the same `on_balasan_insert` that `0010` defines, and
+    `0012` calls `notif_snippet` which only `0010` creates. No migration file records itself in
+    `schema_migrations`; every entry so far was written by hand. The old duplicate-`0005`
+    collision is resolved (`0007_presensi_unik_harian`).
 *   **Authentication:** Phone Number + PIN login flow mapped to Supabase Auth. Role-based routing (Admin, Parent, Volunteer).
 *   **Admin Features:**
     *   Create Parent/Volunteer accounts (via `noSessionClient` to preserve admin session).
@@ -58,11 +55,13 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 *   **Notifications:** The read path is done for **both** roles — every row any trigger writes is
     now reachable in the app, through one shared `NotificationScreen`. Still pending: real-time
     updates (the table is **not** in the `supabase_realtime` publication, so a subscription would
-    receive nothing). **Push (FCM) is fully deployed but never yet exercised:** the app side is
-    built and installed, the `push-notify` Edge Function is live, the trigger and `push_tokens` are
-    applied, and both Vault secrets are correct — but **no push has been sent or received**, because
-    nothing downstream of sign-in has been tested. Both bells still refresh only on route entry, so
-    a notification arriving while the app is open is not seen until the user navigates.
+    receive nothing). **Push (FCM) now works end to end and has been seen on a real phone**, which
+    this paragraph denied until 2026-08-30: `push_tokens` holds two devices, `net._http_response`
+    holds `200`s from the Edge Function, and a task-creation push arrived on a parent's phone
+    carrying the volunteer's and child's names — so `0010` is confirmed working, not merely applied.
+    Tapping one from a cold start opens the right screen; that path crashed until the same day and
+    the fix is in the Change Log. Both bells still refresh only on route entry, so a notification
+    arriving while the app is open is not seen until the user navigates.
     `'tugas_reminder'` is now written by the daily `pengingat-tugas` cron job (migration `0012`,
     **not yet run**) and has its own `NotifType`, icon and tests. The `notif_type` values
     `'presensi'` and `'tugas_missed'` remain declared but unused — no trigger writes them, and the
@@ -296,6 +295,62 @@ child so `is_parent_of` admits their parent.
     of this limitation that remains true.
 
 ## Change Log
+
+### [2026-08-30] - Tapping a Push From a Cold Start Killed the App, and My First Fix Did Not Work
+* **The symptom, reported from a real device:** a volunteer creates a task, the parent's phone
+    buzzes, the parent taps it — the app opens for two or three seconds and closes again.
+* **This was my regression, introduced in Part 1**, not by the deep link Part 2 added. Before the
+    `graphStart` latch, `startDestination` was hardcoded to `"login"`, so the `NavHost` composed on
+    the very first frame and `navigate()` always had a graph. The latch that fixed the login flash
+    is what opened this. Part 2 only made it *frequent*: before it only a feedback push could reach
+    this path, and now every task notification does.
+* **Confirmed from the device's crash buffer before touching any code**, rather than fixed on a
+    hypothesis: `IllegalArgumentException: Cannot navigate to tugas_detail/… Navigation graph has
+    not been set`, thrown at `SipatokkongMain.kt:106` — the `navigate()` inside the push effect.
+* **The mechanism.** On a cold start the first composition has `graphStart == null`, so the NavHost
+    does not compose and the controller has no graph. Effects then run: `LaunchedEffect(resolved)`
+    assigns `graphStart`, which only *schedules* a recomposition, and the push effect runs in that
+    same pass and navigates against nothing.
+* **My first fix was wrong, was shipped to the device, and failed there.** Adding `graphStart` as a
+    key and returning early while null looks obviously correct and is not, for two reasons worth
+    keeping:
+    1. Reading `graphStart` **inside the coroutine reads the live value**, not the key the effect
+       was launched with. `LaunchedEffect(resolved)` assigns it during the same effect pass, so by
+       the time the body ran the guard already saw non-null while no NavHost had composed.
+    2. Even a composition-time snapshot would only be reasoning about effect *ordering*, and
+       whether `NavHost` installs its graph during composition or in an effect of its own is a
+       library implementation detail that is free to change.
+* **What found the failure was the defensive `runCatching` I had added alongside** — it turned the
+    crash into a logged warning, and the warning said the graph still was not set. Without that log
+    line the "fix" would have looked like a success: no crash, and a notification tap that silently
+    did nothing. That is the exact failure mode a swallowed navigation invites, and it is why the
+    catch logs loudly rather than quietly.
+* **The working fix waits for the graph instead of predicting it:**
+    `navController.currentBackStackEntryFlow.first()` before navigating. It emits only once a graph
+    is set and a destination is current, and emits immediately when that is already true — so it is
+    correct regardless of how the frames fall, and costs nothing on the warm path.
+* **Verified on the reporter's own signed-in phone, not on the emulator.** Installed, force-stopped,
+    and relaunched with the tray intent reproduced exactly:
+    ```
+    adb shell am start -n com.antoniusindra.sipatokkong/.MainActivity \
+        --es push_route "tugas_detail/00000000-0000-0000-0000-000000000000"
+    ```
+    Result: no crash, no navigation warning, and a screenshot showing the app open **on the task
+    detail screen** reading "Tugas tidak ditemukan." — correct, because the id was deliberately
+    fake. That command needs no real push and is the repro to reuse.
+* **Also learned from the device, and it corrects this document:** FCM is not untested any more.
+    `net._http_response` holds five `200`s, `push_tokens` holds two rows, and a real task-creation
+    push arrived on a real phone with the name in its title — so migration `0010` is confirmed
+    working end to end, not just applied.
+* **Migrations `0010`, `0011` and `0012` are applied**, verified by query rather than by memory, and
+    all twelve are now recorded in `supabase_migrations.schema_migrations`.
+* **Still not verified:** the daily reminder. `kirim_pengingat_tugas()` has now been called four
+    times and returned `0` every time, because no task fell due on the days it ran — so the second
+    call returning `0` proved nothing about the dedupe either. `tugas_jatuh_pada` has still never
+    matched a row.
+* **No unit test, and I will not pretend otherwise.** The bug is Compose effect-versus-composition
+    ordering; reproducing it needs the Compose runtime, and this repo is JUnit4 only. The adb repro
+    above is what replaces a test, and it is written down here for that reason.
 
 ### [2026-08-30] - Closing the Text-Overflow Gaps, and a Daily Reminder That Finally Writes an Unused Enum Value
 * **The text-cap sweep in Part 1 missed three `Text` composables, and I found them by auditing
