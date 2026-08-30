@@ -29,9 +29,7 @@ import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.FormatBold
-import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Title
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -81,7 +79,6 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil3.compose.AsyncImage
 import com.antoniusindra.sipatokkong.core.recurrence.RecurrenceType
 import com.antoniusindra.sipatokkong.core.recurrence.labelId
 import com.antoniusindra.sipatokkong.data.model.MediaKind
@@ -93,6 +90,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import com.antoniusindra.sipatokkong.ui.components.MediaPickerBox
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -688,69 +686,6 @@ internal fun ChildDropdown(
                         expanded = false
                     },
                 )
-            }
-        }
-    }
-}
-
-/**
- * @param hasMedia whether demo media is attached at all, from either source. Kept separate from
- *   [previewUrl] because a template's signed URL arrives asynchronously: without this the box would
- *   fall back to "Ketuk untuk pilih" for a second and read as if the media had been lost.
- * @param previewUrl what to render as the thumbnail -- a local content Uri for a picked file, a
- *   signed URL for media inherited from a template.
- */
-@Composable
-internal fun MediaPickerBox(
-    hasMedia: Boolean,
-    previewUrl: String?,
-    mediaKind: MediaKind?,
-    mediaName: String?,
-    onPick: () -> Unit,
-    // Worded by the caller: the presensi bucket accepts photos only, so the task form's
-    // "foto/video ... MP4" prompt would be a lie there.
-    emptyPrompt: String = "Ketuk untuk pilih foto/video",
-    formatHint: String = "JPG, WebP, atau MP4",
-) {
-    val showsImage = hasMedia && mediaKind == MediaKind.IMAGE && previewUrl != null
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(if (showsImage) 200.dp else 120.dp)
-            .clickable { onPick() },
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        when {
-            showsImage -> {
-                AsyncImage(
-                    model = previewUrl,
-                    contentDescription = "Pratinjau media",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(160.dp),
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(mediaName ?: "Ketuk untuk ganti", style = MaterialTheme.typography.labelMedium)
-            }
-
-            hasMedia -> {
-                Icon(Icons.Filled.Movie, contentDescription = null, modifier = Modifier.size(40.dp))
-                Spacer(Modifier.height(8.dp))
-                Text(mediaName ?: "Media terpilih")
-                Text("Ketuk untuk ganti", style = MaterialTheme.typography.labelMedium)
-            }
-
-            else -> {
-                Icon(
-                    Icons.Filled.CloudUpload,
-                    contentDescription = null,
-                    modifier = Modifier.size(40.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(emptyPrompt)
-                Text(formatHint, style = MaterialTheme.typography.labelMedium)
             }
         }
     }

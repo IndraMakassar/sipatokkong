@@ -78,6 +78,7 @@ import com.antoniusindra.sipatokkong.ui.theme.MutedText
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import com.antoniusindra.sipatokkong.ui.components.MediaPickerBox
 
 private val DetailDateFormat =
     DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy", Locale.forLanguageTag("id-ID"))
@@ -203,6 +204,7 @@ fun TaskDetailScreen(
                 onResponse = viewModel::onResponseChange,
                 onDuration = viewModel::onDurationChange,
                 onCatatan = viewModel::onCatatanChange,
+                onPickProof = { showSourceChoice = true },
             )
         }
     }
@@ -226,6 +228,7 @@ private fun DetailBody(
     onResponse: (ChildResponse) -> Unit,
     onDuration: (WorkDuration) -> Unit,
     onCatatan: (String) -> Unit,
+    onPickProof: () -> Unit,
 ) {
     val tugas = ui.tugas!!
     Column(
@@ -366,22 +369,25 @@ private fun DetailBody(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            // Selected proof preview
-            if (ui.proofUri != null) {
-                Text("Bukti terpilih", fontWeight = FontWeight.SemiBold, color = MutedText)
-                if (ui.proofKind == MediaKind.IMAGE) {
-                    AsyncImage(
-                        model = ui.proofUri,
-                        contentDescription = "Bukti",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(160.dp)
-                            .clip(RoundedCornerShape(12.dp)),
-                    )
-                } else {
-                    Text("🎬 Video bukti terpilih", style = MaterialTheme.typography.bodyMedium)
-                }
-            }
+            // The same MediaPickerBox the volunteer's presensi and program-ajar forms use, rather
+            // than a second way of doing the same thing. It replaces a plain AsyncImage that showed
+            // the chosen file and could not be tapped: a parent who picked the wrong photo had no
+            // way to change it except leaving the screen and coming back.
+            //
+            // Moving the picker here is also what lets the bottom button mean ONE thing. It used to
+            // pick when there was no proof and submit when there was, distinguished only by its
+            // label -- two similar sentences carrying the difference between "choose a file" and
+            // "send this, irreversibly", on a screen built for people who find reading hard.
+            Text("Bukti Pengerjaan", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            MediaPickerBox(
+                hasMedia = ui.proofUri != null,
+                previewUrl = ui.proofUri,
+                mediaKind = ui.proofKind,
+                mediaName = null,
+                onPick = onPickProof,
+                emptyPrompt = "Ketuk untuk ambil foto atau pilih dari galeri",
+                formatHint = "Foto dikecilkan otomatis sebelum diunggah",
+            )
 
             if (ui.submitError != null) {
                 Text(ui.submitError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
@@ -597,7 +603,7 @@ private fun SubmitBar(
     Surface(shadowElevation = 8.dp, color = Color.White) {
         Box(Modifier.padding(16.dp)) {
             Button(
-                onClick = { if (hasProof) onSubmit() else onPick() },
+                onClick = onSubmit,
                 enabled = !alreadyDone && !isSubmitting,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -610,11 +616,10 @@ private fun SubmitBar(
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
                     alreadyDone -> Text("Sudah Selesai")
-                    !hasProof -> {
-                        Icon(Icons.Filled.PhotoCamera, contentDescription = null)
-                        Spacer(Modifier.size(8.dp))
-                        Text("Kirim Bukti Foto & Selesai")
-                    }
+                    // One label, one meaning. Left ENABLED without proof on purpose: tapping it
+                    // then produces "Pilih foto/video bukti terlebih dahulu.", which points at the
+                    // box above. A disabled button would be silent about why, and silence is the
+                    // worst answer to give someone who cannot read their way out of it.
                     else -> Text("Kirim & Tandai Selesai")
                 }
             }

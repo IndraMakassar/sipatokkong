@@ -54,6 +54,7 @@ import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
 import com.antoniusindra.sipatokkong.ui.theme.MutedText
 import com.antoniusindra.sipatokkong.ui.theme.StatusRedBg
 import com.antoniusindra.sipatokkong.ui.theme.StatusRedText
+import com.antoniusindra.sipatokkong.ui.components.MediaPickerBox
 
 /**
  * "Catat Kunjungan" — the volunteer's attendance form.

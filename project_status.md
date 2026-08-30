@@ -302,6 +302,35 @@ child so `is_parent_of` admits their parent.
 
 ## Change Log
 
+### [2026-08-30] - The Completion Screen Stopped Hiding Its Own Controls
+* **Asked whether the screen was really the simplest it could be for a parent, the answer was no** —
+    and one of the three problems was one I had just added.
+* **The bottom button did two different things and only its wording said which.**
+    "Kirim Bukti Foto & Selesai" meant *pick a file*; "Kirim & Tandai Selesai" meant *send this,
+    irreversibly*. Two similar sentences carrying that difference, on a screen built for people who
+    find reading hard.
+* **A wrongly chosen photo could not be changed.** The preview was a plain `AsyncImage` with no
+    action, and the button had already turned into Submit — so the only way out was leaving the
+    screen and coming back.
+* **And my source dialog had added a tap** for everyone who only wanted the gallery, as a modal that
+    covered the form it belonged to.
+* **The fix was a component this app already had.** `MediaPickerBox` — the volunteer's presensi and
+    program-ajar forms both use it — now carries the proof: preview in place, "Ketuk untuk ganti"
+    when filled, and the source dialog reached by tapping something obviously photo-shaped rather
+    than by tapping Submit.
+* **So the bottom button now means one thing.** Left **enabled** without proof on purpose: tapping it
+    produces "Pilih foto/video bukti terlebih dahulu.", which points at the box above. A disabled
+    button would be silent about why, and silence is the worst answer for someone who cannot read
+    their way out of it.
+* **`MediaPickerBox` moved to `ui/components/`.** It lived inside `CreateTaskScreen`, and importing a
+    volunteer screen's helper into the parent's screen would have been a wire nobody could see.
+    Three of the four media surfaces in the app now share it. Three imports it orphaned were removed.
+* **Verified:** 361 tests still green, zero warnings, clean build.
+* **Not verified, and I stopped chasing it:** the rendered layout. The screen sits behind a parent
+    login the emulator does not have, and two probe attempts were defeated by the host screens'
+    Scaffolds. What stands instead is that the component is unchanged and already renders correctly
+    on two screens that *are* reachable — which is weaker evidence, and worth saying so.
+
 ### [2026-08-30] - The Cancel Button Was in the Wrong Half of the Dialog
 * **Reported from the device:** in the proof-source chooser, "Batal" was in the wrong place.
 * **AlertDialog lays `confirmButton` and `dismissButton` out side by side on one row.** I put the two
