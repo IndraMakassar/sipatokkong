@@ -88,7 +88,7 @@ class NotificationRepository(private val client: SupabaseClient) {
      * that class -- the policy gates rows, not columns.
      */
     suspend fun markRead(id: String) {
-        client.postgrest.from("notifications").update(NotificationReadUpdate()) {
+        client.postgrest.from("notifications").update(NotificationReadUpdate(isRead = true)) {
             filter { eq("id", id) }
         }
     }
@@ -127,7 +127,7 @@ class NotificationRepository(private val client: SupabaseClient) {
      * detector is the next `refresh()`.
      */
     suspend fun markAllRead() {
-        client.postgrest.from("notifications").update(NotificationReadUpdate()) {
+        client.postgrest.from("notifications").update(NotificationReadUpdate(isRead = true)) {
             filter { eq("is_read", false) }
         }
     }

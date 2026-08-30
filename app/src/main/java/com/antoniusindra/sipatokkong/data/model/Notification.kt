@@ -44,7 +44,21 @@ data class Notification(
  * whole object would legally rewrite `title`, `body`, `type` and `created_at` with whatever the
  * phone last decoded, clobbering anything the server changed in between. Mirrors [TaskStopUpdate].
  */
+/**
+ * The PATCH body for marking a notification read.
+ *
+ * `isRead` has **no default, deliberately**. It used to carry `= true`, and because
+ * kotlinx.serialization omits any property equal to its default -- supabase-kt serialises with
+ * `Json { ignoreUnknownKeys = true }`, which leaves `encodeDefaults` off -- the entire body
+ * serialised to `{}`. PostgREST accepts an empty PATCH without complaint, so every "mark as read"
+ * in the app silently wrote nothing for the whole life of the feature, and the row came back unread
+ * on the next refresh.
+ *
+ * Passing `isRead = true` explicitly did not help either: the value equalled the default, so it was
+ * dropped just the same. Removing the default is what makes the empty body impossible to express
+ * rather than merely unlikely. `NotificationPayloadTest` holds the line.
+ */
 @Serializable
 data class NotificationReadUpdate(
-    @SerialName("is_read") val isRead: Boolean = true,
+    @SerialName("is_read") val isRead: Boolean,
 )

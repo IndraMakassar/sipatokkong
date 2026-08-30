@@ -301,6 +301,53 @@ child so `is_parent_of` admits their parent.
 
 ## Change Log
 
+### [2026-08-30] - "Mark as Read" Was Sending an Empty Body, and Had Been All Along
+* **The report:** tapping a notification leaves it unread, and "Tandai semua" clears the marks until
+  you leave the screen and come back. Both paths fail identically — the local flip works, the
+  database write does not.
+* **This is the defect I claimed to fix in Part 1** (`6545bff`), on a phone running that code. That
+  fix moved the write to `ServiceLocator.appScope` so a Back press could not cancel it. It addressed
+  a real bug and was not this one. I had listed it under "not verified" at the time, and the lesson
+  is precise: **I verified the mechanism I suspected and never the outcome.**
+* **The cause was one default value.** `NotificationReadUpdate`'s only property carried `= true`.
+  kotlinx.serialization omits any property equal to its default unless `encodeDefaults` is on, and
+  supabase-kt serialises with `Json { ignoreUnknownKeys = true }`, which leaves it off. The PATCH
+  body was therefore **`{}`** — no columns to set. PostgREST accepts that without complaint, so
+  nothing failed, nothing was written, and the next `refresh()` read the row back unread.
+* **Passing the value explicitly would not have helped**, which is what makes this class of bug
+  nasty: `NotificationReadUpdate(isRead = true)` still equals the default, so it is still dropped.
+* **Proved before fixing, in JUnit, with no device and no login.** `kotlinx-serialization-json` is a
+  direct dependency, so a test could serialise the payload with the same `Json` configuration
+  supabase-kt uses. It failed with `expected:<{"is_read":true}> but was:<{}>` — the whole bug in one
+  assertion, and it now stands as the regression guard.
+* **Fixed by removing the default** rather than by `@EncodeDefault` or a global `encodeDefaults`.
+  Removing it makes the empty body unrepresentable instead of merely unlikely, and needs no
+  experimental opt-in.
+* **Turning on `encodeDefaults` globally would have been the dangerous fix**, and is worth recording
+  as rejected: most `Insert` payloads default their optional fields to `null`, so PostgREST would
+  start receiving explicit `null`s where it currently receives nothing — turning "let the column
+  default apply" into "write null" across `TaskInsert`, `FeedbackInsert`, `PresensiInsert` and the
+  rest. One silent write bug traded for a family of them.
+* **Swept every `*Insert`/`*Update` payload for the same trap.** Two hits, `TaskInsert.recurrence`
+  and `TaskTemplateInsert.recurrence`, both `= "once"` — and **neither is a bug**, because both
+  columns are `not null default 'once'`, so the value the server applies is the value that was
+  dropped. That safety is invisible and unenforced, so both now carry a comment saying it holds only
+  while the two defaults agree, and pointing at this bug as what happens when there is no column
+  default to catch the omission.
+* **The 15 existing `NotificationInboxTest` cases passed throughout**, and that is the most useful
+  thing about them here: they cover the pure list helpers, the RLS was checked, the coroutine scope
+  was checked — the bug lived in the one layer between all of them, the serialised request body.
+* **Verified:** the new test fails before the fix and passes after, which is the cause proven rather
+  than argued. Full suite **340 tests (from 338), 0 failures, zero warnings**.
+* **Not verified, and it needs a signed-in device:** that the mark now survives leaving and
+  re-entering the screen, that the home bell badge clears, and — the one I would bet against — that
+  the revert-and-banner path works in airplane mode. That branch has been dead code for the life of
+  the feature: with a `{}` body the request never failed, so `onFailure` never ran once. Written
+  correctly is not the same claim as executed once.
+* **Rows marked read before this fix stay unread in the database.** Nothing backfills them and
+  nothing should — the app cannot know which were actually seen. Expect one large sweep the first
+  time each user opens the inbox after updating.
+
 ### [2026-08-30] - Three Replies in One Thread Are Now One Tray Card, Not Three
 * **The symptom, from a device:** three messages in one feedback thread produced three separate
     cards in the phone's notification tray. They are one conversation and belong in one card —
