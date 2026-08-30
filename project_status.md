@@ -164,6 +164,28 @@ The trap: **`isi` is a poor headline on its own.** "Catatan Tambahan" is optiona
 an identical title. `subtitleOf` returns null when the chips were promoted to the headline, so they
 never appear twice on one row.
 
+### Where long text is cut off, and where it is not
+
+**Cap a string where it sits inside something that offers a way to see more. Do not cap it where it
+is the thing that gesture leads to.**
+
+That is a rule about affordances rather than about screens, which matters because the two do not line
+up: `ProgramListScreen`'s expanded instruction lives on a list screen but is a detail surface, and it
+stays uncapped.
+
+So list and card surfaces cap — `tugas.judul` at 2 lines on both the parent's home card and the
+volunteer's programme card, so a programme reads the same to the person who wrote it and the person
+who receives it; names and phone numbers at 1, because a second line means bad data and an ellipsis
+says so; a notification title and body at 2; `presensi.catatan` at 3, the only 3, because a
+one-sentence visit note fits in three lines where two would clip most of them.
+
+And detail surfaces do not. `TaskDetailScreen` caps nothing: a low-literacy parent is being asked to
+*carry out* that instruction, and ellipsising it withholds the task rather than tidying it.
+`FeedbackThreadScreen`'s note and reply bubbles are uncapped for the same reason — a truncated
+message with no way to expand is data loss, not an overflow fix.
+
+Every capped `Text` also needs `overflow = TextOverflow.Ellipsis`, or Compose hard-clips mid-glyph.
+
 ### What a notification card says
 
 `NotifDisplay.from` maps one row of `public.notifications` to one card, and every rule in it exists
@@ -262,6 +284,164 @@ child so `is_parent_of` admits their parent.
     of this limitation that remains true.
 
 ## Change Log
+
+### [2026-08-30] - Measuring the Cold Start Instead of Guessing at It
+* **The wait before the home screen was never network-bound, and I had been saying it was.** I had
+    described it as "an auth-storage read plus one `profiles` SELECT" — one round trip. Measured on
+    `emulator-5554` (API 37, debug build, **signed out**, so zero of it can be network): session
+    resolution takes **3.3-3.9 s**, split roughly half in `createSupabaseClient` and half inside
+    Auth. It is class loading, not latency.
+* **`ServiceLocator.sessionManager` is a `by lazy`, and `ServiceLocator.init()` only stores a
+    Context.** So nothing built the Supabase client until the first composition read the session
+    state — on the main thread. The splash was covering an app that had not started working yet.
+* **`SipatokkongApp.warmSession()` starts that work in `Application.onCreate`, on
+    `ServiceLocator.appScope`.** Measured by logging which thread ran the lazy initialiser and for
+    how long: **main paid 943 / 957 / 983 ms without it, and 202 / 293 / 348 ms with it** — about
+    700 ms of class loading taken off the thread the splash and the first frame need.
+* It does **not** reliably make the background thread win the race — `by lazy` is `SYNCHRONIZED` and
+    main frequently still runs the initialiser. The gain is overlap, not ownership. Recording this
+    because the obvious reading of the code is that it moves the work, and it does not.
+* **Two hypotheses tested and killed, both mine.** `install(Realtime)` is genuinely unused (the only
+    matches in the app are my own `elapsedRealtime` calls) and looked like the cause — removing it
+    measured **no improvement** (3.4-3.9 s), so it stays. And warming `ServiceLocator.supabase`
+    before `sessionManager` measured no better than warming `sessionManager` alone (~340 ms), so the
+    simpler form is kept.
+* **I also had the splash-hold mechanism wrong at first** and said so: I claimed the ~1 s main-thread
+    block happened inside `setKeepOnScreenCondition`. It does not — first composition reads the
+    lazy before the first pre-draw, so composition was paying it. Same thread, different caller.
+* **The 2 s splash bound is being blown through on this emulator**, since resolution takes 3.3 s+.
+    The constant is left alone deliberately: it is a ceiling on staring at a logo, not an estimate
+    of the work, and raising it to cover a debug-build number would lengthen a real stall rather
+    than fix one. Past the bound what the user needs is the in-app Retry button.
+* **`MainActivity.SPLASH_MAX_HOLD_MS` carried the wrong explanation in code, so I rewrote it.** Its
+    KDoc justified the 2 s with "the reported wait is 1-2 s (an auth-storage read plus one
+    `profiles` SELECT)" — the same claim the measurement just refuted. A comment that argues for a
+    constant from a false premise is worse than no comment, because the next person will adjust the
+    constant to fit it. It now states the measured figure and says why the number stays anyway.
+* **The largest remaining lever is R8, and it is untouched.** `app/build.gradle.kts` still carries
+    `optimization { enable = false }` on release **from the initial commit** — the AGP project
+    template default, not a reaction to a breakage (`git log -S` confirms). The shipped APK
+    therefore loads the whole unshrunk Ktor + supabase-kt graph. Not turned on here: there is no
+    release `signingConfig` and no `proguard-rules.pro`, so it cannot be built, installed or
+    verified in this session, and enabling shrinking blind on a kotlinx-serialization app is how you
+    ship a release that crashes on first decode.
+* **Rejected again, now with a correction to the reason.** A cached profile/role would remove the
+    query, and my earlier objection ("a stale role routes into the wrong graph") is weaker than I
+    stated: `EditAccountViewModel` carries `role` over untouched and no screen in the app can change
+    an existing account's role. The reasons that survive are that the wait is not the query, that a
+    persisted identity is a second thing `signOut()` must clear on a shared phone, and that an
+    optimistic route has to be unwound when the guess is wrong.
+* **`ProfileScreen` reads `profile.address`, `profile.phone` and `profile.familyStatus` off the
+    SessionManager profile as a fallback**, so narrowing `loadProfile`'s `select *` to the routing
+    columns would blank those fields. Combined with latency not being the bottleneck, the narrowing
+    I offered earlier is **withdrawn** — it would trade a visible regression for nothing.
+* **Verified:** `:app:testDebugUnitTest` + `:app:assembleDebug --rerun-tasks`, **287 tests, 0
+    failures, zero compiler warnings**; final APK installed on `emulator-5554` and confirmed to emit
+    exactly one startup line and no leftover probes.
+* **Adds no tests, and I will not pretend otherwise** — a warm-up is a side effect on process
+    startup, unobservable from JUnit without Robolectric. What replaces a test here is the logcat
+    line, which makes the thing it improves measurable on any device at any time.
+* **Not verified:** all of the above signed *in*, where the `profiles` SELECT is added on top; and
+    the numbers in a release build, which is what users actually run.
+
+### [2026-08-30] - The Sweep That Was Cancelled, and Three Things Around Startup
+* **"Tandai semua dibaca" never reached the database, and it was my bug.** I shipped it yesterday
+    **unverified**, listed it under "not verified", and this is what that gap was hiding. Found by
+    the user on a device, not by me.
+* **My first diagnosis was wrong.** I assumed `filter { eq("is_read", false) }` on an UPDATE was not
+    being applied. Checked against the supabase-kt sources: `filter` lives on
+    `PostgrestRequestBuilder` — the base class `update` uses — mutates `params` by reference, and
+    reaches the wire as `PATCH /rest/v1/notifications?is_read=eq.false`. All five update call sites
+    in the repo are the identical shape. Nothing was wrong with it.
+* **The real cause was coroutine cancellation.** `markAllRead` ran on `viewModelScope`. The button's
+    whole purpose is "clear the badge and leave", so the next gesture is Back — which pops the
+    destination, clears its `ViewModelStore`, and cancels the PATCH, often before it reached the
+    socket. `runCatching` caught the `CancellationException`, so the failure branch wrote a banner
+    onto a ViewModel already being destroyed: no error shown, no write, rows unread again on
+    re-entry. That also explains why `markRead` worked — tapping a feedback card navigates
+    *forward*, so the screen stays on the back stack. It had the identical bug, unexercised.
+* **Fixed by splitting the write from its presentation by lifetime.** New `ServiceLocator.appScope`
+    (matching the two process-lifetime scopes `SessionManager` and `PushRegistrar` already own)
+    runs the write with `async`; `viewModelScope` only `await`s the outcome. Cancelling the awaiter
+    does not cancel the awaited job. Screen alive: it reverts and banners as before. Screen gone:
+    the write still lands and there is nobody to apologise to, which is correct.
+* **New `Result.rethrowCancellation()`**, because `runCatching` swallowing `CancellationException`
+    is what made this invisible — it turns "cancelled" into "failed" everywhere in the app.
+* **Deliberately did not add `count` or `select` to the update.** `select()` would return every
+    updated row — 300 JSON notifications for a busy parent, over the connection that file exists to
+    conserve. `count` is cheap but there is nothing correct to do with a zero: the caller only runs
+    when the *local* unread count is positive, so a server zero means the local list disagreed
+    (another device swept, or a refresh landed mid-flight), not that anything failed — reverting on
+    it would un-read rows that really are read.
+* **The login screen was drawn on every launch by construction.** `startDestination` was hardcoded
+    to `"login"` and `SignedIn` fell into the same `else` branch as `SignedOut`, so the `NavHost`
+    composed the login screen first and a `LaunchedEffect` then navigated away with a 400 ms slide.
+    There was no session for which the correct home was the start destination.
+* **And a worse defect underneath it: backgrounding the app destroyed the whole back stack.** The
+    `Loading` branch rendered *instead of* the `NavHost`, and supabase-kt's Android lifecycle
+    observer pushes `Initializing` on **every** `onStop` — so backgrounding the app three screens
+    deep tore the `NavHost` out of composition and returned to one. The old
+    `LaunchedEffect(sessionState)` also re-fired `popUpTo(0)` on every `SignedIn` **emission**, not
+    just transitions.
+* **Two more doors led out of a valid session.** `RefreshFailure` was mapped to `SignedOut` — on the
+    patchy data this app is written for, a refresh that cannot reach the network says nothing about
+    whether the stored session is valid. And `NotAuthenticated` carries an `isSignOut` flag that was
+    being discarded, so "initialisation finished, storage empty" was read as a real sign-out.
+* **New `SessionTransition`, one rule: once this process has resolved a profile, only an explicit
+    sign-out may undo it.** That single branch kills the reopen flash **without any caching** —
+    `Profile` is a data class, so a re-resolved `SignedIn` compares equal and `MutableStateFlow`
+    conflates it: no emission, no recomposition. Plus `onProfileLoadFailed`, so only the *first*
+    profile failure becomes an error pane; a later reload failure leaves the working session alone.
+* **New `SessionRouting`** and a latched `graphStart`, so the graph opens on the right root and later
+    root changes navigate only when the root actually **changes**. The new `when` over
+    `SessionManager.State` is **exhaustive with no `else`** — the bug being fixed was literally
+    `SignedIn` falling into one, so a future fifth state should be a compile error.
+* **Considered and rejected: caching the profile in DataStore.** After the above it solves nothing
+    on reopen. It would only help a cold start, where a stale **role** routes into the wrong graph
+    and every query then fails under RLS — far worse than a spinner. And a persisted identity is a
+    second thing `signOut()` must clear on a shared phone.
+* **Also deleted a `println` of the signed-in user's auth uid and a `printStackTrace`** from
+    `SessionManager`. They shipped identity to logcat on a shared-phone app.
+* **There was no splash screen at all** — `themes.xml` was one empty style. On Android 12+ the system
+    improvised one from the launcher icon; on **every device below 12** there was a blank window and
+    then a bare spinner. That is exactly "on some phones no logo, just buffering", and the phones
+    were the pre-12 ones. Added `androidx.core:core-splashscreen`, which backports it to API 23 —
+    and, more importantly, is the only way to **hold** the splash until the session resolves, which
+    removes the spinner and the flash together. Bounded at 2 s: a held splash swallows touches, so
+    one with no way out is worse than a spinner.
+* **The splash icon is `ic_launcher_foreground`, not `@mipmap/ic_launcher`.** The adaptive icon
+    carries its own tile; API 31+ masks that to a circle and the backport does not mask at all, so
+    the same asset would be a circle on new phones and a hard-edged square on exactly the old ones
+    this fix is for.
+* **Text caps, under a stated rule rather than scattered numbers:** *cap a string where it sits
+    inside something that offers a way to see more; do not cap it where it is the thing that gesture
+    leads to.* So `tugas.judul` on the home card is 2 lines (the reported bug) while `TaskDetailScreen`
+    caps nothing — a low-literacy parent is being asked to *carry out* that instruction, and
+    ellipsising it withholds the task. `FeedbackThreadScreen`'s reply bubbles stay uncapped for the
+    same reason: a truncated chat message with no way to expand is data loss, not an overflow fix.
+    Names and phone numbers get 1 line, because a second line means bad data and an ellipsis says so.
+    `presensi.catatan` gets 3 — the only 3, because a one-sentence visit note fits in three lines
+    where two would clip most of them.
+* **The feedback row you asked me to check was already correct** — 1 line plus ellipsis on both its
+    headline and subtitle, since the day it was written.
+* **Tests: 287, up from 263** (12 `SessionTransitionTest`, 8 `SessionRoutingTest`, 4 `ResultExtTest`).
+    The twenty session tests are the highest-value ones here, because they encode the exact rules
+    that were wrong. One of my own test assertions was wrong and the suite caught it: `assertSame`
+    on a `Result`, which is a value class and is re-boxed on the way through.
+* **Verified:** `:app:testDebugUnitTest` + `:app:assembleDebug` from `--rerun-tasks`, **287 tests,
+    0 failures, zero compiler warnings**. The splash was **installed and photographed on
+    `emulator-5554`** — teal field, mark centred and legible, no blank window and no bare spinner.
+* **Not verified.** Everything behind sign-in, which is most of it: that the sweep now survives a
+    Back press, that reopening the app keeps you on the screen you left, that a failed refresh no
+    longer bounces you to login, and that a long programme title now wraps at two lines. Also not
+    verified: the splash on a **pre-12** device — the emulator is API 37, and the backport is the
+    half of that fix that matters most.
+* **A behaviour change to watch for:** a genuinely dead token now surfaces as an error on the screen
+    you are on, rather than bouncing you to the login screen. On this network that is the better
+    trade, but it is the change most likely to read as "it used to log me out".
+* **Found in passing, not fixed:** `ProfileViewModel.saveProfile` never touches `SessionManager`, so
+    editing your own profile already did not refresh the "Halo, {nama}!" header. Pre-existing and
+    out of scope for this change.
 
 ### [2026-08-30] - A Logo, and Notifications That Say Who Is Talking
 * **The launcher icon was still the stock Android Studio green robot**, untouched since the first
