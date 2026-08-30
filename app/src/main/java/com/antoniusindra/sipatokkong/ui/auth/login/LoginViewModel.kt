@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.data.repository.AuthRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,7 +49,7 @@ class LoginViewModel(private val repository: AuthRepository) : ViewModel() {
             }.onSuccess {
                 _uiState.update { it.copy(isLoading = false, isSuccess = true) }
             }.onFailure { e ->
-                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Terjadi kesalahan") }
+                _uiState.update { it.copy(isLoading = false, error = ErrorText.of(e, "Terjadi kesalahan")) }
             }
         }
     }

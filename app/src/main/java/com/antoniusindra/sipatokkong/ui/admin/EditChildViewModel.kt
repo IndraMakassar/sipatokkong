@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.data.model.Child
 import com.antoniusindra.sipatokkong.data.model.ChildUpdate
 import com.antoniusindra.sipatokkong.data.model.Profile
@@ -103,7 +104,7 @@ class EditChildViewModel(
                 }
             }.onFailure { e ->
                 _uiState.update {
-                    it.copy(isLoading = false, error = e.message ?: "Gagal memuat data anak")
+                    it.copy(isLoading = false, error = ErrorText.of(e, "Gagal memuat data anak"))
                 }
             }
         }
@@ -180,7 +181,7 @@ class EditChildViewModel(
                 _uiState.update { it.copy(isSubmitting = false, isSuccess = true) }
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(isSubmitting = false, error = e.message ?: "Gagal menyimpan perubahan")
+                    it.copy(isSubmitting = false, error = ErrorText.of(e, "Gagal menyimpan perubahan"))
                 }
             }
         }

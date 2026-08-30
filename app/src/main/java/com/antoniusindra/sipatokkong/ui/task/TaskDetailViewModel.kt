@@ -9,6 +9,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.media.ImageCompressor
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.core.media.MediaBucket
 import com.antoniusindra.sipatokkong.core.media.MediaDownloadHandler
 import com.antoniusindra.sipatokkong.core.media.MediaRef
@@ -119,7 +120,7 @@ class TaskDetailViewModel(
                     )
                 }
             }.onFailure { e ->
-                _uiState.update { it.copy(isLoading = false, loadError = e.message ?: "Gagal memuat tugas") }
+                _uiState.update { it.copy(isLoading = false, loadError = ErrorText.of(e, "Gagal memuat tugas")) }
             }
         }
     }
@@ -256,7 +257,7 @@ class TaskDetailViewModel(
                 )
                 _uiState.update { it.copy(isSubmitting = false, isSuccess = true) }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isSubmitting = false, submitError = e.message ?: "Gagal mengirim bukti") }
+                _uiState.update { it.copy(isSubmitting = false, submitError = ErrorText.of(e, "Gagal mengirim bukti")) }
             }
         }
     }

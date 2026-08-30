@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.data.model.TaskTemplate
 import com.antoniusindra.sipatokkong.data.repository.TaskRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,7 +52,7 @@ class TemplateListViewModel(
                 }
                 .onFailure { e ->
                     _uiState.update {
-                        it.copy(isLoading = false, error = e.message ?: "Gagal memuat template")
+                        it.copy(isLoading = false, error = ErrorText.of(e, "Gagal memuat template"))
                     }
                 }
         }
@@ -68,7 +69,7 @@ class TemplateListViewModel(
                 .onFailure { e ->
                     // actionError, not error: the list stays on screen.
                     _uiState.update {
-                        it.copy(deletingId = null, actionError = e.message ?: "Gagal menghapus template")
+                        it.copy(deletingId = null, actionError = ErrorText.of(e, "Gagal menghapus template"))
                     }
                 }
         }

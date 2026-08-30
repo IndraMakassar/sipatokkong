@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.data.model.ChildOption
 import com.antoniusindra.sipatokkong.data.model.CATATAN_RUTIN
 import com.antoniusindra.sipatokkong.data.model.FeedbackInsert
@@ -43,7 +44,11 @@ class CreateFeedbackViewModel(
             _uiState.update { it.copy(isLoadingChild = true) }
             runCatching { childRepository.childForCurrentParent() }
                 .onSuccess { child -> _uiState.update { it.copy(child = child, isLoadingChild = false) } }
-                .onFailure { e -> _uiState.update { it.copy(isLoadingChild = false, error = e.message) } }
+                .onFailure { e ->
+                    _uiState.update {
+                        it.copy(isLoadingChild = false, error = ErrorText.of(e, "Gagal memuat data anak"))
+                    }
+                }
         }
     }
 
@@ -95,7 +100,7 @@ class CreateFeedbackViewModel(
                 )
                 _uiState.update { it.copy(isSubmitting = false, isSuccess = true) }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isSubmitting = false, error = e.message ?: "Gagal mengirim feedback") }
+                _uiState.update { it.copy(isSubmitting = false, error = ErrorText.of(e, "Gagal mengirim feedback")) }
             }
         }
     }

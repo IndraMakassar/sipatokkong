@@ -1,6 +1,7 @@
 package com.antoniusindra.sipatokkong.core.auth
 
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.data.model.Profile
 import com.antoniusindra.sipatokkong.data.model.UserRole
 import io.github.jan.supabase.SupabaseClient
@@ -93,7 +94,7 @@ class SessionManager(private val client: SupabaseClient) {
             // Only the first failure becomes an error pane. This runs again on every app reopen,
             // so on a bad connection a reload failure would otherwise replace a working screen
             // with full-screen Retry. See SessionTransition.onProfileLoadFailed.
-            SessionTransition.onProfileLoadFailed(_state.value, it.message ?: "Gagal memuat profil")
+            SessionTransition.onProfileLoadFailed(_state.value, ErrorText.of(it, "Gagal memuat profil"))
                 ?: return
         }
 

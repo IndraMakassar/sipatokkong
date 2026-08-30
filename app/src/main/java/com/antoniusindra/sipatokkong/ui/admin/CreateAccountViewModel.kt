@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.data.model.Profile
 import com.antoniusindra.sipatokkong.data.model.UserRole
 import com.antoniusindra.sipatokkong.data.repository.AuthRepository
@@ -81,7 +82,7 @@ class CreateAccountViewModel(
 
                 _uiState.update { it.copy(isLoading = false, isSuccess = true) }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Gagal membuat akun") }
+                _uiState.update { it.copy(isLoading = false, error = ErrorText.of(e, "Gagal membuat akun")) }
             }
         }
     }

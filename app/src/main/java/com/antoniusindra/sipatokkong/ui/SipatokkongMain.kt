@@ -170,7 +170,7 @@ fun SipatokkongMain(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(text = state.message, color = MaterialTheme.colorScheme.error)
                         Button(onClick = { sessionManager.retry() }) {
-                            Text("Retry")
+                            Text("Coba Lagi")
                         }
                     }
                 }

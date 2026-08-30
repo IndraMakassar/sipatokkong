@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.core.push.PUSH_LOG_TAG
 import com.antoniusindra.sipatokkong.data.repository.NotificationRepository
 import kotlinx.coroutines.async
@@ -106,7 +107,7 @@ class NotificationViewModel(
                 }
                 .onFailure { e ->
                     _uiState.update {
-                        it.copy(isLoading = false, error = e.message ?: "Gagal memuat notifikasi")
+                        it.copy(isLoading = false, error = ErrorText.of(e, "Gagal memuat notifikasi"))
                     }
                 }
         }
@@ -155,7 +156,7 @@ class NotificationViewModel(
                     _uiState.update {
                         it.copy(
                             isLoadingMore = false,
-                            actionError = e.message ?: "Gagal memuat notifikasi lama",
+                            actionError = ErrorText.of(e, "Gagal memuat notifikasi lama"),
                         )
                     }
                 }
@@ -205,7 +206,7 @@ class NotificationViewModel(
                     _uiState.update { state ->
                         state.copy(
                             items = state.items.map { if (it.id == id) it.copy(isRead = false) else it },
-                            actionError = e.message ?: "Gagal menandai notifikasi",
+                            actionError = ErrorText.of(e, "Gagal menandai notifikasi"),
                         )
                     }
                 }
@@ -262,7 +263,7 @@ class NotificationViewModel(
                     _uiState.update { state ->
                         state.copy(
                             items = NotifInbox.revertToUnread(state.items, flipped),
-                            actionError = e.message ?: "Gagal menandai semua notifikasi",
+                            actionError = ErrorText.of(e, "Gagal menandai semua notifikasi"),
                         )
                     }
                 }

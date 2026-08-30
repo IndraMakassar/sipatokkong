@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.data.model.ChildOption
 import com.antoniusindra.sipatokkong.data.model.Profile
 import com.antoniusindra.sipatokkong.data.model.UserRole
@@ -90,7 +91,7 @@ class FeedbackListViewModel(
                         )
                     }
                 }
-                .onFailure { e -> _uiState.update { it.copy(isLoading = false, error = e.message ?: "Gagal memuat feedback") } }
+                .onFailure { e -> _uiState.update { it.copy(isLoading = false, error = ErrorText.of(e, "Gagal memuat feedback")) } }
         }
     }
 

@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.data.model.Feedback
 import com.antoniusindra.sipatokkong.data.model.FeedbackReply
 import com.antoniusindra.sipatokkong.data.model.FeedbackReplyInsert
@@ -98,7 +99,7 @@ class FeedbackThreadViewModel(
                     )
                 }
             }.onFailure { e ->
-                _uiState.update { it.copy(isLoading = false, loadError = e.message ?: "Gagal memuat") }
+                _uiState.update { it.copy(isLoading = false, loadError = ErrorText.of(e, "Gagal memuat")) }
             }
         }
     }
@@ -133,7 +134,7 @@ class FeedbackThreadViewModel(
                 _uiState.update { it.copy(isSending = false, replyText = if (text == null) "" else it.replyText) }
                 fetch() // reload replies + updated status
             } catch (e: Exception) {
-                _uiState.update { it.copy(isSending = false, sendError = e.message ?: "Gagal mengirim balasan") }
+                _uiState.update { it.copy(isSending = false, sendError = ErrorText.of(e, "Gagal mengirim balasan")) }
             }
         }
     }

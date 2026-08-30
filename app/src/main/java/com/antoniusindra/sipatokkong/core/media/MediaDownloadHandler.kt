@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 
 /** A download waiting for the user to accept its data cost. */
 data class PendingDownload(val ref: MediaRef, val sizeBytes: Long) {
@@ -96,7 +97,7 @@ class MediaDownloadHandler(private val scope: CoroutineScope) {
                 }
             }.onFailure { e ->
                 _state.update {
-                    it.copy(progress = null, error = e.message ?: "Gagal mengunduh media")
+                    it.copy(progress = null, error = ErrorText.of(e, "Gagal mengunduh media"))
                 }
             }
         }

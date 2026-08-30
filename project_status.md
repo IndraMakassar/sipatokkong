@@ -302,6 +302,46 @@ child so `is_parent_of` admits their parent.
 
 ## Change Log
 
+### [2026-08-30] - Errors a Parent Can Read, in Place of a Stack Trace
+* **A wrong PIN showed supabase-kt's five-line `RestException` blob** — the error code, the
+    description, the full request URL, the request headers, and the HTTP method — painted in red on
+    the login screen. No signal showed `HTTP request to https://….supabase.co/… failed with message:
+    Unable to resolve host "…": No address associated with hostname`.
+* **The friendly text already existed and was dead code.** 38 of 39 sites read
+    `e.message ?: "Gagal memuat data"`, and `message` is non-null for essentially every exception —
+    so the fallback never ran. Inverting that priority is most of the fix, and it means the sentences
+    each screen already had were preserved rather than rewritten.
+* **New `core/util/ErrorText.kt`, split into two functions on purpose.** `RestException` cannot be
+    constructed in a unit test (it needs a live Ktor `HttpResponse`), so classification lives in
+    `forMessage(raw, fallback)` — a plain string in, fully testable — and `of(e, fallback)` adds only
+    what a string cannot express: the exception's type.
+* **Message before type, and the order is load-bearing.** `HttpRequestException` is an `IOException`
+    whose message names the real cause; reading the type first would file every one of them as
+    "server unreachable" and lose the distinction between that and "you have no signal".
+* **The rule everything rests on: an unrecognised error yields the caller's own fallback, never the
+    raw text.** A worse message beats a stack trace on a screen belonging to someone who does not
+    read English. The raw text still reaches logcat.
+* **Deliberately does NOT match bare `401`/`403`.** Three digits appear in uuids, paths and counts,
+    and a false positive would tell someone their session had expired when it had not. A test pins
+    that `row 401f2a3b-…-000000000403 not found` stays generic.
+* **Swept 37 sites across 23 files mechanically**, plus three that the pattern could not reach:
+    `CreateFeedbackViewModel` had **no fallback at all** (`error = e.message`), so a null message
+    silently cleared the error and a failed load looked like success;
+    `CreateTaskViewModel`'s was inside a string interpolation; and
+    `CreatePresensiViewModel.messageFor` — the one mapping this app already had — was folded into
+    `ErrorText`, its `raw.isNotBlank() -> raw` branch being itself a leak.
+* **Also fixed the only English button in the app**, `SipatokkongMain`'s bare `Text("Retry")`.
+* **Verified:** 361 tests (from 348), 0 failures, zero warnings. The three rules that matter were
+    each confirmed by reintroducing the defect — the raw-text leak, the `401` false positive, and the
+    type-before-message ordering. A grep confirms no `.message ?:` survives outside logcat lines.
+* **The fixtures are the real strings**, copied from what supabase-kt actually produces, so the day
+    it rewords `invalid_credentials` a test says so rather than a user discovering a generic message.
+* **Known brittleness, stated rather than hidden:** the Supabase cases match on message substrings,
+    because their exception types need a live `HttpResponse`. If the wording changes upstream the
+    login message quietly degrades to the generic sentence — a worse message, never a wrong one.
+* **Not verified:** that a wrong PIN on a real device now reads "Nomor HP atau PIN salah." and
+    nothing else. Needs a signed-in phone.
+
 ### [2026-08-30] - Camera for Task Proof, and the Compression It Could Not Ship Without
 * **A parent could only pick proof from the gallery**, while the button beside the picker already
     wore a camera icon and read "Kirim Bukti Foto" — a small lie since it shipped.

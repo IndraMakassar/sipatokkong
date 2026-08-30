@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.data.model.TaskOccurrence
 import com.antoniusindra.sipatokkong.data.model.TaskOccurrences
 import com.antoniusindra.sipatokkong.data.repository.ChildRepository
@@ -108,7 +109,7 @@ class ParentHomeViewModel(
                     )
                 }
             }.onFailure { e ->
-                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Gagal memuat data") }
+                _uiState.update { it.copy(isLoading = false, error = ErrorText.of(e, "Gagal memuat data")) }
             }
         }
     }
