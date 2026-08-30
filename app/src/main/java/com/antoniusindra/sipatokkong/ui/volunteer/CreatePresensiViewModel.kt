@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import com.antoniusindra.sipatokkong.core.net.Connectivity
 
 data class CreatePresensiUiState(
     val children: List<ChildOption> = emptyList(),
@@ -110,6 +111,14 @@ class CreatePresensiViewModel(
             s.fotoUri == null -> return fail("Foto bukti kunjungan wajib diunggah.")
             s.tanggal.isAfter(LocalDate.now()) -> return fail("Tanggal kunjungan tidak boleh di masa depan.")
             relawanId == null -> return fail("Sesi tidak valid. Silakan login ulang.")
+        }
+
+        // Asked before the attempt, not after it. Without this the user waits out a connection
+        // timeout to be told something the phone already knew -- and here they burn upload data
+        // getting there. A false positive is possible (see Connectivity), so the mapped error on
+        // the way back still has the last word.
+        if (!Connectivity.isOnline(ServiceLocator.appContext)) {
+            return fail(ErrorText.OFFLINE)
         }
 
         viewModelScope.launch {

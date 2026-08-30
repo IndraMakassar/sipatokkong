@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.antoniusindra.sipatokkong.core.net.Connectivity
 
 data class CreateFeedbackUiState(
     val child: ChildOption? = null,
@@ -78,6 +79,15 @@ class CreateFeedbackViewModel(
                 return
             }
             orangtuaId == null -> { _uiState.update { it.copy(error = "Sesi tidak valid. Login ulang.") }; return }
+        }
+
+        // Asked before the attempt, not after it. Without this the user waits out a connection
+        // timeout to be told something the phone already knew -- and here they burn upload data
+        // getting there. A false positive is possible (see Connectivity), so the mapped error on
+        // the way back still has the last word.
+        if (!Connectivity.isOnline(ServiceLocator.appContext)) {
+            _uiState.update { it.copy(error = ErrorText.OFFLINE) }
+            return
         }
 
         viewModelScope.launch {

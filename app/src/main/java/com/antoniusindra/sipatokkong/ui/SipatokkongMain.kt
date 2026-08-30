@@ -57,6 +57,10 @@ import com.antoniusindra.sipatokkong.ui.volunteer.VolunteerHomeScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.VolunteerHomeViewModel
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 
 @Composable
 fun SipatokkongMain(
@@ -167,8 +171,19 @@ fun SipatokkongMain(
         when (val state = sessionState) {
             is SessionManager.State.Error -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(text = state.message, color = MaterialTheme.colorScheme.error)
+                    // Padded and centred. This pane held a one-line raw exception until the error
+                    // messages were humanised; a real sentence is longer, and without this it runs
+                    // edge to edge and reads as if it has been cut off.
+                    Column(
+                        modifier = Modifier.padding(horizontal = 32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = state.message,
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = TextAlign.Center,
+                        )
                         Button(onClick = { sessionManager.retry() }) {
                             Text("Coba Lagi")
                         }

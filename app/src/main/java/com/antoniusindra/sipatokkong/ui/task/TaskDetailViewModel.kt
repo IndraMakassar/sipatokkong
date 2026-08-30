@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.antoniusindra.sipatokkong.core.net.Connectivity
 
 data class TaskDetailUiState(
     val isLoading: Boolean = true,
@@ -198,6 +199,15 @@ class TaskDetailViewModel(
         // parent actually typed. Previously the answer was prefixed into this text, which made it
         // impossible to count or chart.
         val note = s.catatan.trim().ifBlank { null }
+
+        // Asked before the attempt, not after it. Without this the user waits out a connection
+        // timeout to be told something the phone already knew -- and here they burn upload data
+        // getting there. A false positive is possible (see Connectivity), so the mapped error on
+        // the way back still has the last word.
+        if (!Connectivity.isOnline(ServiceLocator.appContext)) {
+            _uiState.update { it.copy(submitError = ErrorText.OFFLINE) }
+            return
+        }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSubmitting = true, submitError = null) }

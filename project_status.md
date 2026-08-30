@@ -302,6 +302,38 @@ child so `is_parent_of` admits their parent.
 
 ## Change Log
 
+### [2026-08-30] - Asking Whether There Is Signal Before Spending a Wait On It
+* **`ACCESS_NETWORK_STATE` had been declared in the manifest since the first commit and never read.**
+    `core/net/Connectivity.kt` is the first thing to read it.
+* **Used before expensive actions, not before every request.** Signing in, uploading proof, saving a
+    visit and sending feedback each cost the user a wait — and on an upload, real data — before
+    failing with a message the phone already had. Loads are deliberately left alone: they already end
+    in a mapped message with a "Coba Lagi" button beside them, and a system-service hop on every
+    happy path would cost more than it gives.
+* **Deviated from the plan, and worth saying why.** The plan put the check *inside* `ErrorText.of`.
+    That was wrong: `ErrorText` is pure and Android-free, injecting a `Context` would have cost it
+    the testability that is the whole reason it is split in two, and the DNS case is already mapped
+    correctly from its message. The connectivity check earns its place as a pre-flight, not as a
+    refinement of a mapping that already works.
+* **Fails open.** Any error reading the system service returns true, so a phone this cannot
+    interrogate is allowed to try rather than being told it is offline when it is not. And a `true`
+    only ever means "worth trying": `NET_CAPABILITY_INTERNET` reports connected on a captive portal,
+    and a network can drop between the check and the call it guards — which is why the mapped error
+    on the way back still has the last word.
+* **Verified on a device, and this is the first end-to-end proof of the error work.** With the
+    emulator's wifi and data disabled, a cold start renders **"Tidak ada koneksi internet. Periksa
+    jaringan Anda lalu coba lagi."** above a **"Coba Lagi"** button. Before this, that same screen
+    showed `Unable to resolve host "…": No address associated with hostname` beside a button
+    labelled "Retry". Confirmed by `uiautomator dump` and screenshot.
+* **One thing the screenshot caught that nothing else would have:** the session error pane had no
+    horizontal padding. It never showed because the text used to be a single raw line; a real
+    sentence runs edge to edge and reads as though it has been cut off. Padded and centred.
+* **Verified:** 361 tests still green, zero warnings, APK installed and cold-started with no crash,
+    plus the offline render above.
+* **Not verified:** the pre-flight on the four action paths themselves — login, proof upload, visit,
+    feedback — since each needs a signed-in account. What was proven is the mechanism they share:
+    with no network, `activeNetwork` is null and the app says so immediately.
+
 ### [2026-08-30] - Errors a Parent Can Read, in Place of a Stack Trace
 * **A wrong PIN showed supabase-kt's five-line `RestException` blob** — the error code, the
     description, the full request URL, the request headers, and the HTTP method — painted in red on
