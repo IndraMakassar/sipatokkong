@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -190,6 +191,8 @@ private fun VisitCard(
                     childName,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 if (visit.fotoPath != null) {
@@ -208,7 +211,7 @@ private fun VisitCard(
             )
 
             visit.catatan?.let { note ->
-                Text(note, style = MaterialTheme.typography.bodyMedium)
+                Text(note, style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
             }
 
             if (isExpanded && visit.fotoPath != null) {

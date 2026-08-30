@@ -11,4 +11,11 @@
     <!-- Tint behind the status-bar notification icon. Same value as BrandTeal in Color.kt;
          duplicated because a notification is drawn by the system, which cannot read Compose. -->
     <color name="notification_accent">#FF2E6E7E</color>
+
+    <!-- Splash window colours. Same values as BrandTealDeep and AppBackground in ui/theme/Color.kt,
+         duplicated for the same reason notification_accent above is: the splash is drawn by the
+         window manager before any Compose code runs, and it cannot read Kotlin. Changing one
+         without the other shows up as a colour step between the splash and the first frame. -->
+    <color name="brand_teal_deep">#FF1E4C57</color>
+    <color name="app_background">#FFF6F7F9</color>
 </resources>

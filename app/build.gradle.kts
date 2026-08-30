@@ -91,6 +91,10 @@ dependencies {
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.datastore.preferences)
 
+    // Splash screen. Backports the Android 12 splash to API 23, which is the point: below 12 there
+    // is no system splash at all, and minSdk here is 27.
+    implementation(libs.androidx.core.splashscreen)
+
     // Push notifications (BOM-aligned)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)

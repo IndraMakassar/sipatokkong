@@ -115,6 +115,15 @@ class NotificationRepository(private val client: SupabaseClient) {
      *
      * Sends no push: `trg_notification_push` (migration `0009`) fires `after insert`, so an UPDATE
      * is invisible to it.
+     *
+     * **Asks for no count and no representation, deliberately.** `select()` would set
+     * `Prefer: return=representation` and send back every updated row — 300 JSON notifications for a
+     * busy parent, over the connection this whole file exists to conserve. `count(Count.EXACT)`
+     * would be cheap, but there is nothing correct to do with a zero: the caller only reaches here
+     * when the *local* unread count is positive, so a server-side zero means the local list
+     * disagreed with the database — another device already swept, or a refresh landed mid-flight —
+     * not that anything failed. Reverting on it would un-read rows that really are read. The honest
+     * detector is the next `refresh()`.
      */
     suspend fun markAllRead() {
         client.postgrest.from("notifications").update(NotificationReadUpdate()) {

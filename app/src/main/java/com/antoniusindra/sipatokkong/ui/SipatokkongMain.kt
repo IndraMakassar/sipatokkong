@@ -13,6 +13,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,26 +66,33 @@ fun SipatokkongMain(
     val sessionState by sessionManager.state.collectAsState()
     val scope = rememberCoroutineScope()
 
-    // Monitor session state changes to trigger root navigation
-    LaunchedEffect(sessionState) {
-        when (val state = sessionState) {
-            is SessionManager.State.SignedOut -> {
-                navController.navigate("login") {
-                    popUpTo(0) { inclusive = true }
-                }
-            }
-            is SessionManager.State.SignedIn -> {
-                val destination = when (state.profile.role) {
-                    UserRole.ADMIN -> "admin_home"
-                    UserRole.ORANGTUA -> "orangtua_home"
-                    UserRole.RELAWAN -> "relawan_home"
-                }
-                navController.navigate(destination) {
-                    popUpTo(0) { inclusive = true }
-                }
-            }
-            else -> {}
+    val resolved = SessionRouting.startRoute(sessionState)
+
+    // Set once and never again. NavHost remembers its graph keyed on startDestination, so letting
+    // this change would rebuild the graph and reset the back stack behind Navigation's back. Every
+    // later root change goes through navigate() below instead.
+    var graphStart by rememberSaveable { mutableStateOf<String?>(null) }
+
+    // The root the graph is currently showing. Seeded from graphStart on the first resolved frame,
+    // because the NavHost already starts there — navigating to it again would rebuild the home
+    // screen and, with popUpTo(0), discard a back stack the user may be three screens deep in.
+    // That is what made backgrounding the app on a task detail come back to the dashboard: the old
+    // effect fired on every SignedIn *emission*, not on transitions.
+    var routedRoot by rememberSaveable { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(resolved) {
+        val target = resolved ?: return@LaunchedEffect
+        if (graphStart == null) {
+            graphStart = target
+            routedRoot = target
+            return@LaunchedEffect
         }
+        if (target == routedRoot) return@LaunchedEffect
+        routedRoot = target
+        // popUpTo(0) stays, and is still right: this now runs only on a genuine root change — a
+        // sign-out, or someone else signing in on a shared phone — where the previous user's stack
+        // must go.
+        navController.navigate(target) { popUpTo(0) { inclusive = true } }
     }
 
     // Declared AFTER the root effect on purpose. That one navigates with popUpTo(0) { inclusive =
@@ -111,26 +121,39 @@ fun SipatokkongMain(
         NotificationPermissionEffect()
     }
 
-    when (val state = sessionState) {
-        is SessionManager.State.Loading -> {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        }
-        is SessionManager.State.Error -> {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = state.message, color = MaterialTheme.colorScheme.error)
-                    Button(onClick = { sessionManager.retry() }) {
-                        Text("Retry")
+    val start = graphStart
+    if (start == null) {
+        // Only reachable BEFORE the session first resolves. After that SessionTransition never
+        // returns to Loading from SignedIn, so the NavHost — once composed — is never torn out of
+        // composition again. That is the fix for backgrounding the app destroying the back stack.
+        //
+        // Normally invisible: the system splash is held over this until the session resolves. Still
+        // reachable when that hold times out, which is why it keeps a way forward.
+        when (val state = sessionState) {
+            is SessionManager.State.Error -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = state.message, color = MaterialTheme.colorScheme.error)
+                        Button(onClick = { sessionManager.retry() }) {
+                            Text("Retry")
+                        }
                     }
                 }
             }
+            // No `else`: the bug this rewrite fixes was SignedIn falling into one. A fifth state
+            // should be a compile error, not a blank screen.
+            is SessionManager.State.Loading,
+            is SessionManager.State.SignedIn,
+            is SessionManager.State.SignedOut -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
         }
-        else -> {
+    } else {
             NavHost(
                 navController = navController,
-                startDestination = "login",
+                startDestination = start,
                 enterTransition = {
                     slideIntoContainer(
                         AnimatedContentTransitionScope.SlideDirection.Left,
@@ -390,6 +413,5 @@ fun SipatokkongMain(
                     CreatePresensiScreen(onBack = { navController.popBackStack() })
                 }
             }
-        }
     }
 }

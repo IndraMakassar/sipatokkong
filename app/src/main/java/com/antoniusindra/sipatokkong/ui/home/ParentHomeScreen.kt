@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -213,7 +214,7 @@ private fun BerandaContent(
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.padding(top = 12.dp)) {
             Text("Selamat pagi,", style = MaterialTheme.typography.bodyMedium, color = MutedText)
-            Text("Halo, ${profile.fullName}!", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("Halo, ${profile.fullName}!", fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
 
         WeeklyProgressCard(childName = childName, done = weekDone, total = weekTotal)
@@ -285,7 +286,7 @@ private fun WeeklyProgressCard(childName: String, done: Int, total: Int) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text("Progres Minggu Ini", color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodyMedium)
-            Text(childName, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(childName, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
 
             if (total == 0) {
                 Text(
@@ -387,6 +388,14 @@ internal fun TaskCard(occurrence: TaskOccurrence, today: LocalDate, onClick: () 
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                     textDecoration = if (occurrence.isDone) TextDecoration.LineThrough else null,
+                    // Two, not one and not unbounded. `weight(1f)` only bounds the width, so a long
+                    // judul wrapped as far as it liked and one card towered over its neighbours —
+                    // card height is the only rhythm this list has. Two lines at 17sp bold in ~55%
+                    // of the width is about 40 characters, which fits real programme names
+                    // ("Latihan Motorik Halus — Meronce Manik"); one would clip ordinary titles.
+                    // Tapping the card opens the full title, so nothing is lost here.
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
 

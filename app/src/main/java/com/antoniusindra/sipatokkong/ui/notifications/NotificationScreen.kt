@@ -47,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -290,6 +291,11 @@ private fun NotificationCard(
                     notif.title,
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,
+                    // Two: nothing caps this server-side, and since migration 0010 it concatenates two
+                    // full names ("Sari Wulandari · Andi"). It shares its Row with the unread dot,
+                    // which must stay put.
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 if (!notif.isRead) {
@@ -302,6 +308,10 @@ private fun NotificationCard(
                 Text(
                     body,
                     style = MaterialTheme.typography.bodyMedium,
+                    // Two. The applied on_tugas_insert writes body = tugas.judul with NO cap at
+                    // all, so this is load-bearing rather than defensive until 0010 runs.
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     color = MutedText,
                 )
             }

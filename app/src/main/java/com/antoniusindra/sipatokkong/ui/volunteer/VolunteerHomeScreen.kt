@@ -213,7 +213,7 @@ private fun VolunteerBeranda(
             modifier = Modifier.padding(top = 12.dp),
         ) {
             Text("Selamat datang,", style = MaterialTheme.typography.bodyMedium, color = MutedText)
-            Text("Halo, ${profile.fullName}!", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("Halo, ${profile.fullName}!", fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
 
         VolunteerSummaryCard(ui = ui, onRetry = onRetry)
@@ -460,7 +460,7 @@ private fun ChildCard(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    Text(name, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Text(name, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (subtitle.isNotBlank()) {
                         Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MutedText)
                     }

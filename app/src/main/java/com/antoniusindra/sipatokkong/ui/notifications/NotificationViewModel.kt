@@ -1,12 +1,15 @@
 package com.antoniusindra.sipatokkong.ui.notifications
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
+import com.antoniusindra.sipatokkong.core.push.PUSH_LOG_TAG
 import com.antoniusindra.sipatokkong.data.repository.NotificationRepository
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -178,8 +181,18 @@ class NotificationViewModel(
             state.copy(items = state.items.map { if (it.id == id) it.copy(isRead = true) else it })
         }
 
+        // Same lifetime split as markAllRead, for the same reason. This one survived by accident:
+        // tapping a feedback card navigates *forward*, so the screen stays on the back stack and
+        // the request completes. A task notification navigates nowhere, so a quick Back cancels it
+        // exactly as it did the sweep.
+        val repo = notificationRepository
+        val write = ServiceLocator.appScope.async {
+            runCatching { repo.markRead(id) }
+                .onFailure { Log.w(PUSH_LOG_TAG, "markRead failed: ${it.message}") }
+        }
+
         viewModelScope.launch {
-            runCatching { notificationRepository.markRead(id) }
+            write.await()
                 .onFailure { e ->
                     _uiState.update { state ->
                         state.copy(
@@ -214,8 +227,28 @@ class NotificationViewModel(
 
         _uiState.update { it.copy(items = NotifInbox.allRead(it.items)) }
 
+        // The write runs on the app scope; only its outcome is presented on this one.
+        //
+        // This is the fix for the sweep never reaching the database. The button's whole purpose is
+        // "clear the badge and get out", so the very next gesture pops this destination, clears its
+        // ViewModelStore and cancels viewModelScope — and a PATCH started there is cancelled
+        // mid-flight, often before it reaches the socket. `runCatching` then swallowed the
+        // CancellationException, so the failure branch wrote a banner nobody could see.
+        //
+        // Cancelling the awaiter below does not cancel the awaited job, because its parent is
+        // appScope. Screen alive: it reverts and banners as before. Screen gone: the write still
+        // lands and there is nobody to apologise to, which is correct.
+        //
+        // The local `repo` matters — capturing `this` would keep appScope holding the whole
+        // ViewModel, and its item list, alive until the request finished.
+        val repo = notificationRepository
+        val write = ServiceLocator.appScope.async {
+            runCatching { repo.markAllRead() }
+                .onFailure { Log.w(PUSH_LOG_TAG, "markAllRead failed: ${it.message}") }
+        }
+
         viewModelScope.launch {
-            runCatching { notificationRepository.markAllRead() }
+            write.await()
                 .onSuccess { _uiState.update { it.copy(allReadSwept = true) } }
                 .onFailure { e ->
                     _uiState.update { state ->
