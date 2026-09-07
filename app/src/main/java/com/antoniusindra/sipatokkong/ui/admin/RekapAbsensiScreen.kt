@@ -71,6 +71,7 @@ private val ShortDate = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.forLan
 @Composable
 fun RekapAbsensiScreen(
     onBack: () -> Unit,
+    onDetail: (String, LocalDate, LocalDate) -> Unit,
     viewModel: RekapAbsensiViewModel = viewModel(factory = RekapAbsensiViewModel.Factory),
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
@@ -150,7 +151,7 @@ fun RekapAbsensiScreen(
                     item { SummaryCard(ui = ui) }
 
                     items(ui.visibleRelawan, key = { it.id }) { row ->
-                        RelawanRekapCard(row)
+                        RelawanRekapCard(row, onClick = { onDetail(row.id, ui.from, ui.to) })
                     }
 
                     item { Spacer(Modifier.height(16.dp)) }
@@ -197,8 +198,9 @@ private fun SummaryCard(ui: RekapAbsensiUiState) {
 }
 
 @Composable
-private fun RelawanRekapCard(row: RekapRelawan) {
+private fun RelawanRekapCard(row: RekapRelawan, onClick: () -> Unit) {
     Card(
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -269,7 +271,8 @@ private fun RekapAbsensiCardPreview() {
                     jumlahKunjungan = 7,
                     jumlahAnak = 3,
                     kunjunganTerakhir = LocalDate.of(2026, 8, 24),
-                )
+                ),
+                onClick = {}
             )
             RelawanRekapCard(
                 RekapRelawan(
@@ -279,7 +282,8 @@ private fun RekapAbsensiCardPreview() {
                     jumlahKunjungan = 0,
                     jumlahAnak = 0,
                     kunjunganTerakhir = null,
-                )
+                ),
+                onClick = {}
             )
         }
     }

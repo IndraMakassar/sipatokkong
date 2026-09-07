@@ -90,6 +90,7 @@ dependencies {
     // Upload queue + local cache
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.play.services.location)
 
     // Splash screen. Backports the Android 12 splash to API 23, which is the point: below 12 there
     // is no system splash at all, and minSdk here is 27.

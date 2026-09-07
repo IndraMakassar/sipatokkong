@@ -302,6 +302,15 @@ child so `is_parent_of` admits their parent.
 
 ## Change Log
 
+### [2026-09-07] - Admin Attendance Overhaul (Photo, Location, Download)
+* **What changed:** Overhauled the admin attendance system to include proof photos and location tracking.
+    *   **Database**: Added `latitude` and `longitude` columns to `public.presensi` (migration `0014`).
+    *   **Volunteer App**: Captures current location using `FusedLocationProviderClient` during visit submission (requires runtime permissions). Proof photos are already mandatory.
+    *   **Admin App**: Tapping a relawan in `RekapAbsensiScreen` now opens `RelawanKunjunganScreen`, displaying all visits with their proof photos and a "Lihat di Peta" button (opens Google Maps).
+    *   **Download**: Added an "Unduh Foto" button to the visit detail card, allowing admins to save proof photos to their device using `DownloadManager`.
+* **Verified:** Build successful, 361 tests still green (need to add new tests).
+* **Not yet verified:** Runtime behavior of location capture and photo download on a real device.
+
 ### [2026-08-30] - The Completion Screen Stopped Hiding Its Own Controls
 * **Asked whether the screen was really the simplest it could be for a parent, the answer was no** —
     and one of the three problems was one I had just added.

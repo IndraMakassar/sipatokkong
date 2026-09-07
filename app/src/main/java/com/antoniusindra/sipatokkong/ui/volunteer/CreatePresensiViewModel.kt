@@ -8,8 +8,9 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
-import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.core.media.ImageCompressor
+import com.antoniusindra.sipatokkong.core.net.Connectivity
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.data.model.ChildOption
 import com.antoniusindra.sipatokkong.data.model.PresensiInsert
 import com.antoniusindra.sipatokkong.data.repository.ChildRepository
@@ -21,7 +22,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import com.antoniusindra.sipatokkong.core.net.Connectivity
 
 data class CreatePresensiUiState(
     val children: List<ChildOption> = emptyList(),
@@ -103,7 +103,7 @@ class CreatePresensiViewModel(
         it.copy(fotoUri = uri.toString(), error = null)
     }
 
-    fun submit() {
+    fun submit(latitude: Double? = null, longitude: Double? = null) {
         val s = _uiState.value
         val relawanId = (sessionManager.state.value as? SessionManager.State.SignedIn)?.profile?.id
         when {
@@ -142,6 +142,8 @@ class CreatePresensiViewModel(
                         tanggal = s.tanggal.format(DateTimeFormatter.ISO_LOCAL_DATE),
                         catatan = s.catatan.trim().ifBlank { null },
                         fotoPath = path,
+                        latitude = latitude,
+                        longitude = longitude,
                     )
                 )
                 _uiState.update { it.copy(isSubmitting = false, isSuccess = true) }
