@@ -60,6 +60,22 @@ class PresensiRepository(private val client: SupabaseClient) {
             }
             .decodeList()
 
+    /**
+     * Every visit for a specific volunteer in a date range, both ends inclusive.
+     * Used for the admin's detailed relawan attendance view.
+     */
+    suspend fun listForRelawan(relawanId: String, from: LocalDate, to: LocalDate): List<Presensi> =
+        client.postgrest.from("presensi")
+            .select {
+                filter {
+                    eq("relawan_id", relawanId)
+                    gte("tanggal", from.format(DateTimeFormatter.ISO_LOCAL_DATE))
+                    lte("tanggal", to.format(DateTimeFormatter.ISO_LOCAL_DATE))
+                }
+                order("tanggal", Order.DESCENDING)
+            }
+            .decodeList()
+
     /** Temporary signed URL for a private proof photo (for display). */
     suspend fun signedFotoUrl(path: String): String =
         client.storage.from("presensi").createSignedUrl(path, 1.hours)

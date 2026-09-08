@@ -1,11 +1,13 @@
 package com.antoniusindra.sipatokkong.ui
 
+import android.util.Log
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
-import android.util.Log
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -15,11 +17,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -29,7 +33,6 @@ import androidx.navigation.navArgument
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
 import com.antoniusindra.sipatokkong.core.push.PUSH_LOG_TAG
-import kotlinx.coroutines.flow.first
 import com.antoniusindra.sipatokkong.data.model.UserRole
 import com.antoniusindra.sipatokkong.ui.admin.CreateAccountScreen
 import com.antoniusindra.sipatokkong.ui.admin.CreateChildScreen
@@ -38,6 +41,7 @@ import com.antoniusindra.sipatokkong.ui.admin.EditChildScreen
 import com.antoniusindra.sipatokkong.ui.admin.ManageAccountsScreen
 import com.antoniusindra.sipatokkong.ui.admin.ManageChildrenScreen
 import com.antoniusindra.sipatokkong.ui.admin.RekapAbsensiScreen
+import com.antoniusindra.sipatokkong.ui.admin.RelawanKunjunganScreen
 import com.antoniusindra.sipatokkong.ui.auth.login.LoginScreen
 import com.antoniusindra.sipatokkong.ui.components.NotificationPermissionEffect
 import com.antoniusindra.sipatokkong.ui.feedback.CreateFeedbackScreen
@@ -55,12 +59,9 @@ import com.antoniusindra.sipatokkong.ui.volunteer.ProgramListScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.TemplateListScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.VolunteerHomeScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.VolunteerHomeViewModel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 
 @Composable
 fun SipatokkongMain(
@@ -482,7 +483,36 @@ fun SipatokkongMain(
                     )
                 }
                 composable("rekap_absensi") {
-                    RekapAbsensiScreen(onBack = { navController.popBackStack() })
+                    RekapAbsensiScreen(
+                        onBack = { navController.popBackStack() },
+                        onDetail = { id, from, to ->
+                            navController.navigate("relawan_kunjungan/$id?from=$from&to=$to")
+                        }
+                    )
+                }
+                composable(
+                    route = "relawan_kunjungan/{relawanId}?from={from}&to={to}",
+                    arguments = listOf(
+                        navArgument("relawanId") { type = NavType.StringType },
+                        navArgument("from") { type = NavType.StringType },
+                        navArgument("to") { type = NavType.StringType },
+                    ),
+                ) { backStackEntry ->
+                    val id = backStackEntry.arguments?.getString("relawanId")
+                    val fromStr = backStackEntry.arguments?.getString("from")
+                    val toStr = backStackEntry.arguments?.getString("to")
+
+                    val from = fromStr?.let { LocalDate.parse(it) } ?: LocalDate.now()
+                    val to = toStr?.let { LocalDate.parse(it) } ?: LocalDate.now()
+
+                    if (id != null) {
+                        RelawanKunjunganScreen(
+                            relawanId = id,
+                            from = from,
+                            to = to,
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
                 }
                 composable("create_presensi") {
                     CreatePresensiScreen(onBack = { navController.popBackStack() })

@@ -1,5 +1,8 @@
 package com.antoniusindra.sipatokkong.ui.volunteer
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -37,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -45,16 +49,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.antoniusindra.sipatokkong.core.media.CameraUriManager
 import com.antoniusindra.sipatokkong.data.model.MediaKind
+import com.antoniusindra.sipatokkong.ui.components.MediaPickerBox
 import com.antoniusindra.sipatokkong.ui.theme.AppBackground
 import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
 import com.antoniusindra.sipatokkong.ui.theme.MutedText
 import com.antoniusindra.sipatokkong.ui.theme.StatusRedBg
 import com.antoniusindra.sipatokkong.ui.theme.StatusRedText
-import com.antoniusindra.sipatokkong.ui.components.MediaPickerBox
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 
 /**
  * "Catat Kunjungan" — the volunteer's attendance form.
@@ -67,6 +74,7 @@ import com.antoniusindra.sipatokkong.ui.components.MediaPickerBox
  * Form building blocks (`SectionLabel`, `ChildDropdown`, `DeadlineField`, `MediaPickerBox`) are
  * imported from `CreateTaskScreen` rather than copied; they were made `internal` for this.
  */
+@SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreatePresensiScreen(
@@ -75,6 +83,7 @@ fun CreatePresensiScreen(
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
     LaunchedEffect(ui.isSuccess) {
         if (ui.isSuccess) {
@@ -90,6 +99,57 @@ fun CreatePresensiScreen(
     ) { success ->
         if (success) {
             tempUri?.let { viewModel.onFotoPicked(it) }
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+
+        if (fineLocationGranted || coarseLocationGranted) {
+            // Permission granted, trigger submit again to capture location
+            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                .addOnSuccessListener { location ->
+                    viewModel.submit(location?.latitude, location?.longitude)
+                }
+                .addOnFailureListener {
+                    viewModel.submit()
+                }
+        } else {
+            // Permission denied, submit without location
+            viewModel.submit()
+        }
+    }
+
+    fun handleSubmit() {
+        val finePermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        )
+        val coarsePermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+
+        if (finePermission == PackageManager.PERMISSION_GRANTED ||
+            coarsePermission == PackageManager.PERMISSION_GRANTED
+        ) {
+            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                .addOnSuccessListener { location ->
+                    viewModel.submit(location?.latitude, location?.longitude)
+                }
+                .addOnFailureListener {
+                    viewModel.submit()
+                }
+        } else {
+            permissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
         }
     }
 
@@ -192,7 +252,7 @@ fun CreatePresensiScreen(
             }
 
             Button(
-                onClick = viewModel::submit,
+                onClick = ::handleSubmit,
                 enabled = ui.canSubmit,
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
