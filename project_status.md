@@ -45,6 +45,7 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
     *   Notification inbox and a bell badge on Beranda, reading the `feedback_baru` rows
         `on_feedback_insert` fans out over `anak_relawan`. Same screen as the parent's, differing
         only in its empty-state line.
+*   **Branding:** Custom app icon and splash screen using the official Sipatokkong logo.
 *   **Communication:** Feedback threads for parent-volunteer interaction, with one-tap quick
     replies for the volunteer and a triaged inbox ("Perlu Ditanggapi" / "Sudah Beres").
 
@@ -301,6 +302,16 @@ child so `is_parent_of` admits their parent.
     of this limitation that remains true.
 
 ## Change Log
+
+### [2026-09-14] - Custom App Icon and Splash Screen Logo
+* **What changed:** Replaced the stock Android Studio green robot icon and the vector splash screen logo with the official Sipatokkong logo from assets.
+* **Implementation:** 
+    * Copied `logo sipatokkong.png` from `assests/` to `res/drawable/logo_sipatokkong.png`.
+    * Updated `AndroidManifest.xml` to use the new PNG for both `android:icon` and `android:roundIcon`.
+    * Updated `themes.xml` (Theme.Sipatokkong.Splash) to use the new logo for `windowSplashScreenAnimatedIcon`.
+    * Updated `SipatokkongMain.kt` to show the logo alongside the `CircularProgressIndicator` during the post-splash session loading phase.
+* **Verified:** Build succeeded. 
+* **Not yet verified:** How it looks on a real device or emulator, especially the transparency of the PNG and how it scales as an app icon. Adaptive icon support is now bypassed in favor of a direct PNG for simplicity as requested.
 
 ### [2026-08-30] - The Completion Screen Stopped Hiding Its Own Controls
 * **Asked whether the screen was really the simplest it could be for a parent, the answer was no** —

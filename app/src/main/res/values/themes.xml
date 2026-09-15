@@ -35,7 +35,7 @@
             x 27..79, y 25..84 of the 108 viewport, inside the 66dp safe zone, so the 31+ circular
             mask clips none of it.
         -->
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/logo_sipatokkong</item>
 
         <!-- Dark field, so status-bar icons must be light. The platform handles this on 31+; this
              is for the backport. -->
