@@ -1,6 +1,7 @@
 package com.antoniusindra.sipatokkong.ui.admin
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -102,17 +103,24 @@ internal fun DateField(
     var showPicker by remember { mutableStateOf(false) }
     val display = date?.format(DateTimeFormatter.ofPattern("dd MMM yyyy")) ?: "Pilih tanggal"
 
-    OutlinedTextField(
-        value = display,
-        onValueChange = {},
-        readOnly = true,
-        enabled = false,
-        label = { Text(label) },
-        trailingIcon = { Icon(Icons.Filled.CalendarMonth, contentDescription = null) },
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { showPicker = true },
-    )
+    Box(modifier = Modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = display,
+            onValueChange = {},
+            readOnly = true,
+            enabled = true,
+            label = { Text(label) },
+            trailingIcon = { Icon(Icons.Filled.CalendarMonth, contentDescription = null) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        // Transparent overlay to catch clicks without showing cursor/keyboard
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clickable { showPicker = true }
+        )
+    }
 
     if (showPicker) {
         // Seeded with the current value so editing an existing date opens on that date.

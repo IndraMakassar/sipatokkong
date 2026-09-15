@@ -59,6 +59,8 @@ import com.antoniusindra.sipatokkong.ui.task.TaskDetailScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.CreatePresensiScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.CreateTaskScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.ProgramListScreen
+import com.antoniusindra.sipatokkong.ui.volunteer.SubmissionDetailScreen
+import com.antoniusindra.sipatokkong.ui.volunteer.TaskSubmissionsScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.TemplateListScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.VolunteerHomeScreen
 import com.antoniusindra.sipatokkong.ui.volunteer.VolunteerHomeViewModel
@@ -435,6 +437,7 @@ fun SipatokkongMain(
                             onCatatKunjungan = { navController.navigate("create_presensi") },
                             onOpenNotifications = { navController.navigate("relawan_notifications") },
                             onOpenFeedbackThread = { id -> navController.navigate("feedback_thread/$id") },
+                            onOpenSubmissions = { navController.navigate("volunteer_submissions") },
                             onRetry = { volunteerVm.refresh() },
                             onLogout = {
                                 scope.launch {
@@ -499,6 +502,19 @@ fun SipatokkongMain(
                 }
                 composable("create_presensi") {
                     CreatePresensiScreen(onBack = { navController.popBackStack() })
+                }
+                composable("volunteer_submissions") {
+                    TaskSubmissionsScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenDetail = { id -> navController.navigate("submission_detail/$id") }
+                    )
+                }
+                composable("submission_detail/{submissionId}") { backStackEntry ->
+                    val subId = backStackEntry.arguments?.getString("submissionId").orEmpty()
+                    SubmissionDetailScreen(
+                        submissionId = subId,
+                        onBack = { navController.popBackStack() }
+                    )
                 }
             }
     }

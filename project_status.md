@@ -35,6 +35,7 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
         read/unread tabs — a tapped row must stay exactly where it is. The screen itself is shared
         with the volunteer — see below.
 *   **Volunteer Features:**
+    *   Monitoring Parent Task Submissions: Volunteers can now view parent-submitted task executions ("Pantau Tugas Anak"), track child responsiveness, durations, parent notes, and media proof, and submit text feedback/evaluations directly back to parents.
     *   Create Task (Program Ajar) with media upload and rich text instructions.
     *   Reusable program-ajar templates, shared across volunteers: save one from the create form
         or from an existing program, then start a new program from it without re-uploading media.
@@ -302,6 +303,34 @@ child so `is_parent_of` admits their parent.
     of this limitation that remains true.
 
 ## Change Log
+
+### [2026-09-15] - Task Submission Monitoring and Feedback for Volunteers
+* **What changed:** Added a fully integrated "Pantau Tugas Anak" feature for volunteer therapists to track parent task execution proofs and provide feedback.
+* **Implementation:**
+    * Wrote migration `0014_tugas_penyelesaian_feedback.sql` adding `feedback_relawan` column to `tugas_penyelesaian` and creating `penyelesaian_update` RLS policy.
+    * Added submission read and write data models to `Completion.kt`.
+    * Implemented repository functions in `TaskRepository.kt` to fetch submissions via raw join queries and update feedback field values.
+    * Created `TaskSubmissionsScreen.kt` and `TaskSubmissionsViewModel.kt` displaying task submission lists with custom status chips ("Butuh Feedback" / "Sudah Dinilai").
+    * Created `SubmissionDetailScreen.kt` and `SubmissionDetailViewModel.kt` enabling details viewing (proof media, notes, responsiveness) and feedback submission.
+    * Wired up navigation routes in `SipatokkongMain.kt` and an access `ActionCard` on `VolunteerHomeScreen.kt`.
+* **Verified:** Built successfully via Gradle assemble (`app:assembleDebug`).
+* **Not yet verified:** Tested runtime data streaming on an actual device or simulator environment.
+
+### [2026-09-15] - Keyboard and Navigation Bar Overlay Fix for Feedback Screens
+* **What changed:** Added IME and navigation bar padding to the feedback forms and conversation thread screens to prevent system overlays (keyboard and on-screen navigation keys) from obscuring inputs.
+* **Implementation:** 
+    * Added `Modifier.imePadding()` to the main scrollable `Column` in `CreateFeedbackScreen.kt`.
+    * Added `Modifier.navigationBarsPadding()` along with `Modifier.imePadding()` to the `bottomBar` layout in `FeedbackThreadScreen.kt`.
+* **Verified:** Build succeeded (`:app:compileDebugKotlin` ran cleanly).
+* **Not yet verified:** Runtime visual layout check on a real device.
+
+### [2026-09-15] - Improved Date Field Appearance in Admin Forms
+* **What changed:** Updated `DateField` in `AdminFormComponents.kt` to avoid looking disabled (grayed out) when active.
+* **Implementation:** 
+    * Changed `enabled = false` to `enabled = true` while keeping `readOnly = true`.
+    * Wrapped the `OutlinedTextField` in a `Box` with a transparent overlay to catch clicks and trigger the date picker, preventing unwanted focus, cursor, or keyboard display.
+* **Verified:** Build succeeded. 
+* **Not yet verified:** Runtime visual check on a real device.
 
 ### [2026-09-15] - Improvements to Admin Account Creation and Edit Screens
 * **What changed:** Enhanced both "Tambah Akun" and "Edit Akun" screens for better UX and session stability.

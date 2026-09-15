@@ -78,6 +78,46 @@ data class TaskCompletion(
     @SerialName("tugas_id") val tugasId: String,
     @SerialName("occurrence_date") val occurrenceDate: String,
     @SerialName("dokumentasi_id") val dokumentasiId: String? = null,
+    @SerialName("feedback_relawan") val feedbackRelawan: String? = null,
+)
+
+/**
+ * Full submission read model for the volunteer monitoring screen.
+ * Includes nested joins for task title and child name.
+ */
+@Serializable
+data class TaskSubmission(
+    val id: String,
+    @SerialName("tugas_id") val tugasId: String,
+    @SerialName("orangtua_id") val orangtuaId: String,
+    @SerialName("occurrence_date") val occurrenceDate: String,
+    @SerialName("dokumentasi_id") val dokumentasiId: String? = null,
+    val catatan: String? = null,
+    /** [ChildResponse.dbValue] */
+    val kemandirian: String? = null,
+    /** [WorkDuration.dbValue] */
+    val durasi: String? = null,
+    @SerialName("feedback_relawan") val feedbackRelawan: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    val tugas: SubmissionTask? = null,
+)
+
+@Serializable
+data class SubmissionTask(
+    val judul: String,
+    @SerialName("anak_id") val anakId: String,
+    val anak: SubmissionChild? = null,
+)
+
+@Serializable
+data class SubmissionChild(
+    val nama: String,
+)
+
+/** Update payload for volunteer feedback on a task submission. */
+@Serializable
+data class TaskFeedbackUpdate(
+    @SerialName("feedback_relawan") val feedback: String?,
 )
 
 /**

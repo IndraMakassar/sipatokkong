@@ -4,13 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,11 +17,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.ChildCare
-import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ChildCare
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
@@ -64,18 +61,18 @@ import com.antoniusindra.sipatokkong.data.model.UserRole
 import com.antoniusindra.sipatokkong.ui.components.NotificationBell
 import com.antoniusindra.sipatokkong.ui.feedback.FeedbackListScreen
 import com.antoniusindra.sipatokkong.ui.home.ProfileScreen
+import com.antoniusindra.sipatokkong.ui.home.StatusChip
 import com.antoniusindra.sipatokkong.ui.theme.AppBackground
 import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
 import com.antoniusindra.sipatokkong.ui.theme.IconBoxBg
-import com.antoniusindra.sipatokkong.ui.home.StatusChip
 import com.antoniusindra.sipatokkong.ui.theme.MutedText
+import com.antoniusindra.sipatokkong.ui.theme.ProgressGradBottom
+import com.antoniusindra.sipatokkong.ui.theme.ProgressGradTop
+import com.antoniusindra.sipatokkong.ui.theme.SipatokkongTheme
 import com.antoniusindra.sipatokkong.ui.theme.StatusOrangeBg
 import com.antoniusindra.sipatokkong.ui.theme.StatusOrangeText
 import com.antoniusindra.sipatokkong.ui.theme.StatusTealBg
 import com.antoniusindra.sipatokkong.ui.theme.StatusTealText
-import com.antoniusindra.sipatokkong.ui.theme.ProgressGradBottom
-import com.antoniusindra.sipatokkong.ui.theme.ProgressGradTop
-import com.antoniusindra.sipatokkong.ui.theme.SipatokkongTheme
 
 /**
  * The volunteer's home, replacing the four unstyled buttons that used to live inline in the nav
@@ -104,12 +101,8 @@ fun VolunteerHomeScreen(
     onOpenFeedbackThread: (String) -> Unit,
     onRetry: () -> Unit,
     onLogout: () -> Unit,
-    /**
-     * Opens the inbox behind the bell. Defaulted, unlike every parameter above it: the `@Preview`
-     * at the bottom of this file passes all ten of those by name, and a required eleventh would
-     * stop this file rendering in the IDE — which is the thing that preview exists to prevent.
-     */
     onOpenNotifications: () -> Unit = {},
+    onOpenSubmissions: () -> Unit = {},
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
 
@@ -163,6 +156,7 @@ fun VolunteerHomeScreen(
                     onOpenTemplates = onOpenTemplates,
                     onOpenChild = onOpenChild,
                     onCatatKunjungan = onCatatKunjungan,
+                    onOpenSubmissions = onOpenSubmissions,
                     onRetry = onRetry,
                 )
 
@@ -198,6 +192,7 @@ private fun VolunteerBeranda(
     onOpenTemplates: () -> Unit,
     onOpenChild: (String) -> Unit,
     onCatatKunjungan: () -> Unit,
+    onOpenSubmissions: () -> Unit,
     onRetry: () -> Unit,
 ) {
     Column(
@@ -235,6 +230,12 @@ private fun VolunteerBeranda(
             title = "Program Ajar Saya",
             description = "Lihat program yang berjalan dan hentikan bila perlu.",
             onClick = onOpenPrograms,
+        )
+        ActionCard(
+            icon = Icons.AutoMirrored.Filled.Assignment, // use matching assign icon or child icon
+            title = "Pantau Tugas Anak",
+            description = "Lihat hasil pengerjaan tugas oleh orang tua dan beri masukan.",
+            onClick = onOpenSubmissions,
         )
         ActionCard(
             icon = Icons.Filled.EventAvailable,
@@ -537,6 +538,7 @@ private fun VolunteerHomeScreenPreview() {
             onOpenFeedbackThread = {},
             onRetry = {},
             onLogout = {},
+            onOpenSubmissions = {},
         )
     }
 }

@@ -5,10 +5,12 @@ import com.antoniusindra.sipatokkong.data.model.DocumentationInsert
 import com.antoniusindra.sipatokkong.data.model.InsertedId
 import com.antoniusindra.sipatokkong.data.model.Task
 import com.antoniusindra.sipatokkong.data.model.TaskAidRow
-import com.antoniusindra.sipatokkong.data.model.TaskInsert
 import com.antoniusindra.sipatokkong.data.model.TaskCompletion
 import com.antoniusindra.sipatokkong.data.model.TaskCompletionInsert
+import com.antoniusindra.sipatokkong.data.model.TaskFeedbackUpdate
+import com.antoniusindra.sipatokkong.data.model.TaskInsert
 import com.antoniusindra.sipatokkong.data.model.TaskStopUpdate
+import com.antoniusindra.sipatokkong.data.model.TaskSubmission
 import com.antoniusindra.sipatokkong.data.model.TaskTemplate
 import com.antoniusindra.sipatokkong.data.model.TaskTemplateInsert
 import io.github.jan.supabase.SupabaseClient
@@ -124,6 +126,29 @@ class TaskRepository(private val client: SupabaseClient) {
             .decodeSingleOrNull()
 
     // ---- Relawan: manage own programs ----
+
+    /** Submissions/completions from parents for tasks belonging to the current volunteer. */
+    suspend fun submissionsForCurrentVolunteer(): List<TaskSubmission> =
+        client.postgrest.from("tugas_penyelesaian")
+            .select(columns = Columns.raw("*, tugas(judul, anak_id, anak(nama))")) {
+                order("completed_at", Order.DESCENDING)
+            }
+            .decodeList()
+
+    /** Fetches a single submission by its id with joined task and child details. */
+    suspend fun submissionFor(id: String): TaskSubmission? =
+        client.postgrest.from("tugas_penyelesaian")
+            .select(columns = Columns.raw("*, tugas(judul, anak_id, anak(nama))")) {
+                filter { eq("id", id) }
+            }
+            .decodeSingleOrNull()
+
+    /** Updates the volunteer feedback field for a task submission. */
+    suspend fun updateFeedback(submissionId: String, feedback: String?) {
+        client.postgrest.from("tugas_penyelesaian").update(TaskFeedbackUpdate(feedback = feedback)) {
+            filter { eq("id", submissionId) }
+        }
+    }
 
     /** Programs created by the signed-in volunteer. RLS `tugas_select` already limits the rows. */
     suspend fun programsForCurrentVolunteer(): List<Task> =
