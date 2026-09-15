@@ -38,9 +38,9 @@ object SupabaseModule {
             supabaseKey = BuildConfig.SUPABASE_ANON_KEY,
         ) {
             install(Auth) {
+                sessionManager = null
                 autoLoadFromStorage = false
                 alwaysAutoRefresh = false
-                // No session manager means it won't persist
             }
             install(Postgrest)
         }

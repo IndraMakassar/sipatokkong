@@ -303,6 +303,16 @@ child so `is_parent_of` admits their parent.
 
 ## Change Log
 
+### [2026-09-15] - Improvements to Admin Account Creation and Edit Screens
+* **What changed:** Enhanced both "Tambah Akun" and "Edit Akun" screens for better UX and session stability.
+* **UI/UX Improvements:**
+    *   Added `Modifier.imePadding()` to both forms to prevent the keyboard from obscuring input fields and action buttons.
+    *   Replaced manual text entry for `familyStatus` with a Material 3 `ExposedDropdownMenuBox` featuring fixed options: **Ayah**, **Ibu**, and **Wali**.
+* **Session Security:**
+    *   Explicitly isolated the `noSessionClient` used for registration by setting `sessionManager = null`, preventing administrative session corruption during new account creation.
+* **Verified:** Build succeeded. 
+* **Not yet verified:** Runtime behavior on a real device, specifically the scrolling interaction when the IME is visible on the Edit screen.
+
 ### [2026-09-14] - Custom App Icon and Splash Screen Logo
 * **What changed:** Replaced the stock Android Studio green robot icon and the vector splash screen logo with the official Sipatokkong logo from assets.
 * **Implementation:** 
