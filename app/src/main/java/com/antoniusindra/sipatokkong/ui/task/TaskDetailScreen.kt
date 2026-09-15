@@ -1,5 +1,6 @@
 package com.antoniusindra.sipatokkong.ui.task
 
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -24,7 +25,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -34,26 +37,20 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.core.app.NotificationManagerCompat
-import com.antoniusindra.sipatokkong.core.push.PushPayload
-import android.net.Uri
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import com.antoniusindra.sipatokkong.core.media.CameraUriManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,23 +59,25 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
-import com.antoniusindra.sipatokkong.data.model.ChildResponse
-import com.antoniusindra.sipatokkong.data.model.MediaKind
-import com.antoniusindra.sipatokkong.data.model.WorkDuration
+import com.antoniusindra.sipatokkong.core.media.CameraUriManager
 import com.antoniusindra.sipatokkong.core.media.MediaDownloadState
+import com.antoniusindra.sipatokkong.core.push.PushPayload
+import com.antoniusindra.sipatokkong.data.model.ChildResponse
 import com.antoniusindra.sipatokkong.data.model.Documentation
+import com.antoniusindra.sipatokkong.data.model.WorkDuration
 import com.antoniusindra.sipatokkong.ui.components.DownloadIconButton
 import com.antoniusindra.sipatokkong.ui.components.MediaDownloadHost
+import com.antoniusindra.sipatokkong.ui.components.MediaPickerBox
 import com.antoniusindra.sipatokkong.ui.components.RichTextDisplay
 import com.antoniusindra.sipatokkong.ui.theme.BrandTeal
 import com.antoniusindra.sipatokkong.ui.theme.MutedText
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import com.antoniusindra.sipatokkong.ui.components.MediaPickerBox
 
 private val DetailDateFormat =
     DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy", Locale.forLanguageTag("id-ID"))
@@ -320,6 +319,24 @@ private fun DetailBody(
                     download = download,
                     onDownload = onDownloadProof,
                 )
+            }
+
+            ui.feedbackRelawan?.let { feedback ->
+                Spacer(Modifier.height(8.dp))
+                Text("Masukan / Feedback Relawan", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BrandTeal)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
+                ) {
+                    Text(
+                        text = feedback,
+                        modifier = Modifier.padding(14.dp),
+                        fontSize = 15.sp,
+                        color = Color.Black,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
             }
         } else {
             // Independence selector — 2x2 grid, because four cards with labels as long as

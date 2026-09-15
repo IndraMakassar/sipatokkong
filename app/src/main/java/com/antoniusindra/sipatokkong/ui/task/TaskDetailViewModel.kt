@@ -7,22 +7,22 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
-import com.antoniusindra.sipatokkong.core.media.ImageCompressor
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
-import com.antoniusindra.sipatokkong.core.util.ErrorText
+import com.antoniusindra.sipatokkong.core.media.ImageCompressor
 import com.antoniusindra.sipatokkong.core.media.MediaBucket
 import com.antoniusindra.sipatokkong.core.media.MediaDownloadHandler
 import com.antoniusindra.sipatokkong.core.media.MediaRef
+import com.antoniusindra.sipatokkong.core.net.Connectivity
+import com.antoniusindra.sipatokkong.core.util.ErrorText
 import com.antoniusindra.sipatokkong.data.model.ChildResponse
 import com.antoniusindra.sipatokkong.data.model.Documentation
-import com.antoniusindra.sipatokkong.data.model.WorkDuration
 import com.antoniusindra.sipatokkong.data.model.DocumentationInsert
 import com.antoniusindra.sipatokkong.data.model.MediaKind
 import com.antoniusindra.sipatokkong.data.model.Task
 import com.antoniusindra.sipatokkong.data.model.TaskCompletionInsert
 import com.antoniusindra.sipatokkong.data.model.TaskOccurrences
+import com.antoniusindra.sipatokkong.data.model.WorkDuration
 import com.antoniusindra.sipatokkong.data.repository.TaskRepository
-import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,7 +30,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.antoniusindra.sipatokkong.core.net.Connectivity
+import java.time.LocalDate
 
 data class TaskDetailUiState(
     val isLoading: Boolean = true,
@@ -44,6 +44,7 @@ data class TaskDetailUiState(
     /** The proof the parent already submitted for this date, once it has been read back. */
     val submittedProof: Documentation? = null,
     val submittedProofUrl: String? = null,
+    val feedbackRelawan: String? = null,
     // completion form
     val response: ChildResponse? = null,
     val duration: WorkDuration? = null,
@@ -103,21 +104,18 @@ class TaskDetailViewModel(
                     date = date,
                 )
                 val proof = if (done) loadProof(id, date) else null
-                Loaded(tugas, date, url, done, proof?.first, proof?.second)
+                Loaded(tugas, date, url, done, proof?.first, proof?.second, proof?.third)
             }.onSuccess { loaded ->
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         tugas = loaded.tugas,
                         mediaUrl = loaded.mediaUrl,
-                        // The resolved date, not the parameter: on the notification path the
-                        // parameter is null and this is the only thing that knows the answer. The
-                        // screen already prints it back ("Jadwal ..."), which is what tells a
-                        // parent which day they landed on.
                         occurrenceDate = loaded.date,
                         alreadyDone = loaded.done,
                         submittedProof = loaded.proof,
                         submittedProofUrl = loaded.proofUrl,
+                        feedbackRelawan = loaded.feedbackRelawan,
                     )
                 }
             }.onFailure { e ->
@@ -134,6 +132,7 @@ class TaskDetailViewModel(
         val done: Boolean,
         val proof: Documentation?,
         val proofUrl: String?,
+        val feedbackRelawan: String?,
     )
 
     /**
@@ -146,12 +145,13 @@ class TaskDetailViewModel(
     private suspend fun loadProof(
         tugasId: String,
         occurrenceDate: LocalDate,
-    ): Pair<Documentation, String?>? = runCatching {
+    ): Triple<Documentation?, String?, String?>? = runCatching {
         val completion = taskRepository.completionFor(tugasId, occurrenceDate.toString())
-        val dokumentasiId = completion?.dokumentasiId ?: return@runCatching null
-        val doc = taskRepository.getDocumentation(dokumentasiId) ?: return@runCatching null
+        val feedback = completion?.feedbackRelawan
+        val dokumentasiId = completion?.dokumentasiId ?: return@runCatching Triple(null, null, feedback)
+        val doc = taskRepository.getDocumentation(dokumentasiId) ?: return@runCatching Triple(null, null, feedback)
         val url = runCatching { taskRepository.signedDocumentationUrl(doc.mediaPath) }.getOrNull()
-        doc to url
+        Triple(doc, url, feedback)
     }.getOrNull()
 
     fun onResponseChange(r: ChildResponse) = _uiState.update { it.copy(response = r) }
