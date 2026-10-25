@@ -51,7 +51,6 @@ import com.antoniusindra.sipatokkong.ui.feedback.CreateFeedbackScreen
 import com.antoniusindra.sipatokkong.ui.feedback.FeedbackListScreen
 import com.antoniusindra.sipatokkong.ui.feedback.FeedbackThreadScreen
 import com.antoniusindra.sipatokkong.ui.home.AdminHomeScreen
-import com.antoniusindra.sipatokkong.ui.home.ParentHistoryScreen
 import com.antoniusindra.sipatokkong.ui.home.ParentHomeScreen
 import com.antoniusindra.sipatokkong.ui.home.ParentHomeViewModel
 import com.antoniusindra.sipatokkong.ui.notifications.NotificationScreen
@@ -289,6 +288,11 @@ fun SipatokkongMain(
                             onOpenFeedbackThread = { id -> navController.navigate("feedback_thread/$id") },
                             onComposeFeedback = { navController.navigate("create_feedback") },
                             onSeeAllHistory = { navController.navigate("parent_history") },
+                            olderTasks = {
+                                com.antoniusindra.sipatokkong.ui.home.OldOverdueTasks(onOpenTask = { id, date ->
+                                    navController.navigate("tugas_detail/$id?occurrenceDate=$date")
+                                })
+                            },
                             occurrencesByDate = parentState.visibleByDate,
                             weekDone = parentState.weekDone,
                             weekTotal = parentState.weekTotal,
@@ -312,19 +316,9 @@ fun SipatokkongMain(
                 composable("parent_history") {
                     val signedInState = sessionState as? SessionManager.State.SignedIn
                     if (signedInState != null) {
-                        val parentVm: ParentHomeViewModel = viewModel(factory = ParentHomeViewModel.Factory)
-                        val parentState by parentVm.uiState.collectAsState()
-                        LaunchedEffect(Unit) { parentVm.refresh() }
-                        ParentHistoryScreen(
-                            history = parentState.history,
-                            isLoading = parentState.isLoading,
-                            error = parentState.error,
-                            onRetry = parentVm::refresh,
-                            today = parentState.today,
+                        com.antoniusindra.sipatokkong.ui.home.TaskHistoryRoute(
                             onBack = { navController.popBackStack() },
-                            onOpenTask = { id, date ->
-                                navController.navigate("tugas_detail/$id?occurrenceDate=$date")
-                            }
+                            onOpenSubmission = { navController.navigate("submission_detail/$it") },
                         )
                     }
                 }
@@ -466,8 +460,12 @@ fun SipatokkongMain(
                         emptyText = "Catatan dan setoran tugas dari orang tua akan muncul di sini.",
                     )
                 }
+                composable("edit_program/{taskId}") { entry ->
+                    CreateTaskScreen(onBack = { navController.popBackStack() }, editTaskId = entry.arguments?.getString("taskId"))
+                }
                 composable("volunteer_programs") {
                     ProgramListScreen(
+                        onEditProgram = { navController.navigate("edit_program/$it") },
                         onBack = { navController.popBackStack() },
                         onCreateProgram = { navController.navigate("create_program_ajar") },
                     )

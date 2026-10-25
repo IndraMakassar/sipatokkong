@@ -88,9 +88,11 @@ private val ShortDate = ShortDateId
 fun ProgramListScreen(
     onBack: () -> Unit,
     onCreateProgram: () -> Unit,
+    onEditProgram: (String) -> Unit = {},
     viewModel: ProgramListViewModel = viewModel(factory = ProgramListViewModel.Factory),
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
+    var confirmCancel by remember { mutableStateOf<Task?>(null) }
     var confirmStop by remember { mutableStateOf<Task?>(null) }
     var nameTemplateFor by remember { mutableStateOf<Task?>(null) }
     var templateName by remember { mutableStateOf("") }
@@ -107,6 +109,12 @@ fun ProgramListScreen(
         }
     }
 
+    confirmCancel?.let { target ->
+        AlertDialog(onDismissRequest = { confirmCancel = null }, title = { Text("Batalkan tugas?") },
+            text = { Text("Tugas ini tidak akan diminta lagi. Tugas yang sudah disetor tidak dapat dibatalkan.") },
+            confirmButton = { TextButton(onClick = { viewModel.cancelTask(target); confirmCancel = null }) { Text("Batalkan tugas") } },
+            dismissButton = { TextButton(onClick = { confirmCancel = null }) { Text("Kembali") } })
+    }
     confirmStop?.let { target ->
         AlertDialog(
             onDismissRequest = { confirmStop = null },
@@ -242,6 +250,9 @@ fun ProgramListScreen(
                             ProgramCard(
                                 task = task,
                                 childName = ui.childNameOf(task),
+                                onEdit = { onEditProgram(task.id) },
+                                onCancel = { confirmCancel = task },
+                                replaced = ui.programs.any { it.previousVersionId == task.id },
                                 today = ui.today,
                                 isStopping = ui.stoppingId == task.id,
                                 isSavingTemplate = ui.savingTemplateFor == task.id,
@@ -262,8 +273,11 @@ fun ProgramListScreen(
                             ProgramCard(
                                 task = task,
                                 childName = ui.childNameOf(task),
+                                onEdit = { onEditProgram(task.id) },
+                                onCancel = { confirmCancel = task },
+                                replaced = ui.programs.any { it.previousVersionId == task.id },
                                 today = ui.today,
-                                isStopping = false,
+                                isStopping = ui.stoppingId == task.id,
                                 isSavingTemplate = ui.savingTemplateFor == task.id,
                                 onStop = null,
                                 onSaveAsTemplate = {
@@ -312,10 +326,13 @@ private fun ProgramCard(
     isSavingTemplate: Boolean,
     onStop: (() -> Unit)?,
     onSaveAsTemplate: () -> Unit,
+    onEdit: () -> Unit,
+    onCancel: () -> Unit,
+    replaced: Boolean,
 ) {
     val rule = task.toRecurrenceRule()
     val finished = rule.isFinished(today)
-    val inactive = task.isStopped || finished
+    val inactive = task.isStopped || finished || task.cancelledAt != null || task.status == "done" || replaced
     var expanded by remember { mutableStateOf(false) }
 
     Card(
@@ -353,8 +370,10 @@ private fun ProgramCard(
                 }
 
                 when {
+                    task.cancelledAt != null -> StatusChip("Dibatalkan", StatusRedBg, StatusRedText)
+                    replaced -> StatusChip("Versi sebelumnya", StatusRedBg, StatusRedText)
                     task.isStopped -> StatusChip("Dihentikan", StatusRedBg, StatusRedText)
-                    finished -> StatusChip("Selesai", StatusTealBg, StatusTealText)
+                    finished || task.status == "done" -> StatusChip("Selesai", StatusTealBg, StatusTealText)
                     else -> StatusChip("Berjalan", StatusGreenBg, StatusGreenText)
                 }
             }
@@ -414,6 +433,10 @@ private fun ProgramCard(
                     }
                 }
 
+                if (!inactive) {
+                    TextButton(onClick = onEdit, enabled = !isStopping) { Text("Edit") }
+                    if (!task.isRecurring) TextButton(onClick = onCancel, enabled = !isStopping) { Text("Batalkan tugas") }
+                }
                 // Only a live recurring program can be stopped.
                 if (onStop != null && !inactive) {
                     TextButton(onClick = onStop, enabled = !isStopping) {

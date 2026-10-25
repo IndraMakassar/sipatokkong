@@ -31,6 +31,8 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 
 data class CreateTaskUiState(
+    val editingTask: com.antoniusindra.sipatokkong.data.model.Task? = null,
+    val loadingEdit: Boolean = false,
     val children: List<ChildOption> = emptyList(),
     val isLoadingChildren: Boolean = true,
     val selectedAnakId: String? = null,
@@ -94,7 +96,7 @@ data class CreateTaskUiState(
     val isRecurring: Boolean get() = recurrence != RecurrenceType.ONCE
 
     /** True when demo media is present, from either source. */
-    val hasMedia: Boolean get() = mediaUri != null || templateMediaPath != null
+    val hasMedia: Boolean get() = mediaUri != null || templateMediaPath != null || editingTask != null
 
     /**
      * The name a template would be saved under.
@@ -154,11 +156,39 @@ data class CreateTaskUiState(
 class CreateTaskViewModel(
     private val childRepository: ChildRepository,
     private val taskRepository: TaskRepository,
-    private val sessionManager: SessionManager,
+    private val currentVolunteerId: () -> String?,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CreateTaskUiState())
     val uiState: StateFlow<CreateTaskUiState> = _uiState.asStateFlow()
+
+    private var uploadedEditMedia: Pair<String, String>? = null
+    private val editRequestId = java.util.UUID.randomUUID().toString()
+
+    fun loadEdit(id: String) {
+        if (_uiState.value.editingTask != null || _uiState.value.loadingEdit) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(loadingEdit = true, error = null) }
+            try {
+                val t = taskRepository.getTask(id) ?: error("Program tidak ditemukan.")
+                val preview = runCatching { taskRepository.signedDemoUrl(t.mediaPath) }.getOrNull()
+                _uiState.update { it.copy(
+                    editingTask = t, loadingEdit = false, selectedAnakId = t.anakId,
+                    judul = t.judul, instruksi = t.instruksi.orEmpty(),
+                    priority = TaskPriority.entries.first { p -> p.dbValue == t.priorityLevel },
+                    mediaKind = MediaKind.entries.first { m -> m.dbValue == t.mediaKind },
+                    mediaName = "Media program saat ini", templateMediaPreviewUrl = preview,
+                    alatBantu = t.alatBantu.orEmpty().toSet(), recurrence = t.recurrenceType,
+                    daysOfWeek = t.recurrenceDays.orEmpty().map { d -> DayOfWeek.of(d) }.toSet(),
+                    dayOfMonth = t.recurrenceDayOfMonth?.toString().orEmpty(),
+                    intervalDays = t.recurrenceInterval?.toString().orEmpty(),
+                    startsOn = t.startsOn?.let(LocalDate::parse), endsOn = t.endsOn?.let(LocalDate::parse),
+                    deadline = t.deadline?.let(LocalDate::parse),
+                ) }
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { _uiState.update { it.copy(loadingEdit = false, error = ErrorText.of(e, "Gagal memuat program")) } }
+        }
+    }
 
     // Store extension separately so the upload names the file correctly.
     private var mediaExt: String? = null
@@ -388,7 +418,8 @@ class CreateTaskViewModel(
 
     fun submit() {
         val s = _uiState.value
-        val relawanId = (sessionManager.state.value as? SessionManager.State.SignedIn)?.profile?.id
+        if (s.isSubmitting) return
+        val relawanId = currentVolunteerId()
         when {
             s.selectedAnakId == null -> return fail("Pilih anak terlebih dahulu.")
             s.judul.isBlank() -> return fail("Judul program ajar wajib diisi.")
@@ -406,19 +437,25 @@ class CreateTaskViewModel(
                 // Two sources, one destination. Inherited media is copied server-side, so reusing
                 // a template costs no upload at all -- and the copy is what puts the object under
                 // this child's id, which is the only reason their parent can open it.
-                val path = if (s.mediaUri != null) {
-                    val bytes = withContext(Dispatchers.IO) {
+                val path = if (s.editingTask != null && s.mediaUri != null && uploadedEditMedia?.first == s.mediaUri) {
+                    uploadedEditMedia!!.second
+                } else if (s.mediaUri != null) {
+                    val bytes = if (s.editingTask != null && s.mediaKind == MediaKind.IMAGE) {
+                        mediaExt = "jpg"
+                        com.antoniusindra.sipatokkong.core.media.ImageCompressor.compressToJpeg(ServiceLocator.appContext, Uri.parse(s.mediaUri))
+                    } else withContext(Dispatchers.IO) {
                         ServiceLocator.appContext.contentResolver
                             .openInputStream(Uri.parse(s.mediaUri))
                             ?.use { it.readBytes() }
                     } ?: throw IllegalStateException("Gagal membaca file media.")
-                    taskRepository.uploadDemo(s.selectedAnakId!!, bytes, mediaExt!!)
+                    taskRepository.uploadDemo(s.selectedAnakId!!, bytes, mediaExt!!).also { if (s.editingTask != null) uploadedEditMedia = s.mediaUri!! to it }
+                } else if (s.editingTask != null) {
+                    s.editingTask.mediaPath
                 } else {
                     taskRepository.copyTemplateToDemo(s.templateMediaPath!!, s.selectedAnakId!!)
                 }
 
-                taskRepository.create(
-                    TaskInsert(
+                val changes = TaskInsert(
                         anakId = s.selectedAnakId,
                         relawanId = relawanId!!,
                         judul = s.judul.trim(),
@@ -454,8 +491,9 @@ class CreateTaskViewModel(
                         // not an aid the volunteer meant to add.
                         alatBantu = TeachingAid.sortedForStorage(s.alatBantu).ifEmpty { null },
                     )
-                )
-                val warning = if (s.saveAsTemplate) {
+                if (s.editingTask != null) taskRepository.editProgram(s.editingTask, editRequestId, changes)
+                else taskRepository.create(changes)
+                val warning = if (s.saveAsTemplate && s.editingTask == null) {
                     saveTemplate(s, relawanId!!, path)
                 } else null
 
@@ -550,7 +588,7 @@ class CreateTaskViewModel(
                 CreateTaskViewModel(
                     childRepository = ServiceLocator.childRepository,
                     taskRepository = ServiceLocator.taskRepository,
-                    sessionManager = ServiceLocator.sessionManager,
+                    currentVolunteerId = { (ServiceLocator.sessionManager.state.value as? SessionManager.State.SignedIn)?.profile?.id },
                 )
             }
         }

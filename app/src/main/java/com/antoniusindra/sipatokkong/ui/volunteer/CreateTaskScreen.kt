@@ -98,6 +98,7 @@ fun CreateTaskScreen(
     onBack: () -> Unit,
     /** When set, the form opens prefilled from that template. Everything stays editable. */
     templateId: String? = null,
+    editTaskId: String? = null,
     /** When set, the form opens with this child already chosen. Still editable. */
     anakId: String? = null,
     viewModel: CreateTaskViewModel = viewModel(factory = CreateTaskViewModel.Factory),
@@ -106,6 +107,8 @@ fun CreateTaskScreen(
     val context = LocalContext.current
 
     var instruksiValue by remember { mutableStateOf(TextFieldValue(ui.instruksi)) }
+
+    LaunchedEffect(editTaskId) { editTaskId?.let(viewModel::loadEdit) }
 
     LaunchedEffect(templateId) {
         if (templateId != null) viewModel.applyTemplate(templateId)
@@ -127,11 +130,20 @@ fun CreateTaskScreen(
         if (ui.isSuccess) {
             // A template failure still leaves a created program, so say what actually happened
             // rather than the cheerful default -- and give it longer to be read.
-            val message = ui.templateWarning ?: "Program ajar berhasil dibuat!"
+            val message = ui.templateWarning ?: if (editTaskId != null) "Perubahan program tersimpan." else "Program ajar berhasil dibuat!"
             val length = if (ui.templateWarning != null) Toast.LENGTH_LONG else Toast.LENGTH_SHORT
             Toast.makeText(context, message, length).show()
             onBack()
         }
+    }
+
+    if (editTaskId != null && ui.editingTask == null) {
+        Column(Modifier.fillMaxSize().padding(24.dp)) {
+            TextButton(onClick = onBack) { Text("Kembali") }
+            if (ui.loadingEdit) CircularProgressIndicator()
+            else com.antoniusindra.sipatokkong.ui.components.ErrorRetry(ui.error ?: "Program belum dimuat", onRetry = { viewModel.loadEdit(editTaskId) })
+        }
+        return
     }
 
     val mediaPicker = rememberLauncherForActivityResult(
@@ -141,7 +153,7 @@ fun CreateTaskScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Buat Program Ajar") },
+                title = { Text(if (editTaskId != null) "Edit Program Ajar" else "Buat Program Ajar") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
@@ -160,7 +172,10 @@ fun CreateTaskScreen(
         ) {
             // ---- Pilih Anak ----
             SectionLabel("Pilih Anak*")
-            ChildDropdown(
+            if (editTaskId != null) {
+                Text(ui.selectedChildName ?: "Anak pada program ini")
+                Text(if (ui.isRecurring) "Program yang sudah berjalan: perubahan berlaku mulai besok. Riwayat dan tugas sebelumnya tetap tersimpan." else "Perubahan hanya dapat disimpan sebelum ada setoran.")
+            } else ChildDropdown(
                 children = ui.children,
                 isLoading = ui.isLoadingChildren,
                 selectedName = ui.selectedChildName,
@@ -271,7 +286,7 @@ fun CreateTaskScreen(
             // ---- Pola pengulangan ----
             SectionLabel("Pola Pengulangan")
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                RecurrenceType.entries.chunked(3).forEach { row ->
+                RecurrenceType.entries.filter { editTaskId == null || (it == RecurrenceType.ONCE) == (ui.editingTask?.isRecurring == false) }.chunked(3).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         row.forEach { type ->
                             FilterChip(
@@ -327,12 +342,19 @@ fun CreateTaskScreen(
             }
 
             if (ui.isRecurring) {
-                SectionLabel("Tanggal Mulai*")
-                DeadlineField(
-                    deadline = ui.startsOn,
-                    label = "Tanggal Mulai",
-                    onPick = viewModel::onStartsOnChange,
-                )
+                val runningEdit = ui.editingTask?.let {
+                    it.toRecurrenceRule().startsOn <= LocalDate.now(java.time.ZoneId.of("Asia/Makassar"))
+                } == true
+                if (runningEdit) {
+                    Text("Versi baru mulai besok. Jika hanya isi yang berubah, pola tanggal tetap mengikuti program lama.")
+                } else {
+                    SectionLabel("Tanggal Mulai*")
+                    DeadlineField(
+                        deadline = ui.startsOn,
+                        label = "Tanggal Mulai",
+                        onPick = viewModel::onStartsOnChange,
+                    )
+                }
                 SectionLabel("Tanggal Selesai*")
                 DeadlineField(
                     deadline = ui.endsOn,
@@ -353,68 +375,70 @@ fun CreateTaskScreen(
             // form without a SectionLabel and without any container, so on a three-screen scroll it
             // read as a footnote to the submit button rather than a feature -- which is exactly how
             // it kept getting missed.
-            SectionLabel("Template")
-            if (ui.hasTemplateForThisJudul) {
-                // Replaced, not silently removed: UI that vanishes without explanation is worse
-                // than UI that explains itself.
-                Text(
-                    "Sudah ada template untuk judul ini.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MutedText,
-                )
-            } else {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { viewModel.onSaveAsTemplateChange(!ui.saveAsTemplate) },
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Checkbox(
-                                checked = ui.saveAsTemplate,
-                                onCheckedChange = viewModel::onSaveAsTemplateChange,
-                            )
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(
-                                    "Simpan juga sebagai template",
-                                    fontWeight = FontWeight.SemiBold,
+            if (editTaskId == null) {
+                SectionLabel("Template")
+                if (ui.hasTemplateForThisJudul) {
+                    // Replaced, not silently removed: UI that vanishes without explanation is worse
+                    // than UI that explains itself.
+                    Text(
+                        "Sudah ada template untuk judul ini.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MutedText,
+                    )
+                } else {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { viewModel.onSaveAsTemplateChange(!ui.saveAsTemplate) },
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(
+                                    checked = ui.saveAsTemplate,
+                                    onCheckedChange = viewModel::onSaveAsTemplateChange,
                                 )
-                                Text(
-                                    "Supaya bisa dipakai lagi tanpa mengetik ulang.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MutedText,
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        "Simpan juga sebagai template",
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Text(
+                                        "Supaya bisa dipakai lagi tanpa mengetik ulang.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MutedText,
+                                    )
+                                }
+                            }
+                            if (ui.saveAsTemplate) {
+                                Spacer(Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = ui.templateName,
+                                    onValueChange = viewModel::onTemplateNameChange,
+                                    // Optional now, not required: it arrives prefilled from the judul,
+                                    // and a blank one falls back to the judul rather than blocking the
+                                    // save the way it used to.
+                                    label = { Text("Nama Template (opsional)") },
+                                    placeholder = { Text(ui.judul.ifBlank { "mis. Latihan Vokal A-I-U" }) },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    supportingText = {
+                                        // Templates are shared across the whole foundation, and so is
+                                        // their media. Say so here rather than in a doc nobody opens.
+                                        Text("Template dan foto/videonya bisa dilihat semua relawan.")
+                                    },
                                 )
                             }
                         }
-                        if (ui.saveAsTemplate) {
-                            Spacer(Modifier.height(8.dp))
-                            OutlinedTextField(
-                                value = ui.templateName,
-                                onValueChange = viewModel::onTemplateNameChange,
-                                // Optional now, not required: it arrives prefilled from the judul,
-                                // and a blank one falls back to the judul rather than blocking the
-                                // save the way it used to.
-                                label = { Text("Nama Template (opsional)") },
-                                placeholder = { Text(ui.judul.ifBlank { "mis. Latihan Vokal A-I-U" }) },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
-                                supportingText = {
-                                    // Templates are shared across the whole foundation, and so is
-                                    // their media. Say so here rather than in a doc nobody opens.
-                                    Text("Template dan foto/videonya bisa dilihat semua relawan.")
-                                },
-                            )
-                        }
                     }
                 }
-            }
 
+            }
             if (ui.error != null) {
                 Text(
                     ui.error!!,

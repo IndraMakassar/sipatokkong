@@ -119,7 +119,7 @@ class TaskDetailViewModel(
                 val id = completion?.tugasId ?: taskId ?: error("Tugas tidak ditemukan.")
                 val tugas = taskRepository.getTask(id) ?: error("Tugas tidak ditemukan.")
                 val date = completion?.occurrenceDate?.let(LocalDate::parse) ?: requestedDate
-                    ?: tugas.toRecurrenceRule().occurrenceNearest(LocalDate.now())
+                    ?: (if (tugas.cancelledAt != null) tugas.deadline?.let(LocalDate::parse) ?: LocalDate.now() else tugas.toRecurrenceRule().occurrenceNearest(LocalDate.now()))
                     ?: error(NO_OCCURRENCE)
                 val url = runCatching { taskRepository.signedDemoUrl(tugas.mediaPath) }.getOrNull()
                 // Completion is per date, so a recurring program stays open on other days.
@@ -199,6 +199,7 @@ class TaskDetailViewModel(
         val s = _uiState.value
         val tugas = s.tugas ?: return
         val occurrenceDate = s.occurrenceDate ?: return
+        if (s.tugas?.cancelledAt != null) return
         val orangtuaId = currentProfile()?.id
         if (s.proofUri == null || s.proofKind == null || proofExt == null) {
             _uiState.update { it.copy(submitError = "Pilih foto/video bukti terlebih dahulu.") }

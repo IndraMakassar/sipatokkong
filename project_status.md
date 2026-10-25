@@ -6,6 +6,16 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 ## Status Summary
 
 ### ✅ Built / Completed
+*   **Full task history and program management (2026-10-25, pending production deployment):**
+    History reads saved completions independently of current schedules, with inclusive date filters,
+    50-row cursor pages, exact completion links, and recoverable page errors. Home has a separate
+    paginated backlog for unfinished occurrences older than 30 days; weekly progress is unchanged.
+    Volunteers can edit own programs and cancel unsubmitted one-off tasks. Running recurring edits
+    create a linked replacement from tomorrow in Asia/Makassar, preserving old content/media,
+    cadence for content-only edits, and existing proofs/evaluations. Migration `0017` provides
+    transactional edits, cancellation, version checks, idempotent retries, and shared locking with
+    submission inserts. See `docs/history-program-deployment.md` for rollout and compatibility.
+    **Migration `0017` is NOT applied to production.**
 *   **Infrastructure:** Supabase project setup, database schema, RLS policies, and storage bucket
     configurations. **Migrations `0001` through `0012` are applied; `0013` is written but NOT yet run**, as of 2026-08-30 — and
     that is a fact the database records rather than a claim in this file:
@@ -58,7 +68,10 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 
 ### 🚧 In Progress / Partially Built
 *   **Task submission/evaluation notifications:** client routing and migrations `0015`/`0016`
-    are implemented and tested locally, **not applied to production**. Submission notifications
+    are implemented and tested locally. On 2026-10-25 the user reported both migrations succeeded
+    in Supabase and supplied the two installed trigger names; this was user-confirmed deployment,
+    not an agent-run production migration. Live delivery of these new notification types still
+    needs a two-account device check. Submission notifications
     go to the task author, evaluations to the submitting parent. Both use the completion id,
     so inbox and push taps open the exact occurrence even outside the parent's 30-day history.
     Install the new APK before enabling the producers. Commit `0015` before applying `0016`;
@@ -316,6 +329,29 @@ child so `is_parent_of` admits their parent.
     of this limitation that remains true.
 
 ## Change Log
+
+### [2026-10-25] - Complete history, older backlog, and guarded program editing/cancellation
+* **What changed:** Added independent saved-completion history and older-overdue RPCs/UI with
+  cursor pagination, inclusive date filters, retry, retained list data and completion-based navigation.
+  Home completion reads are bounded to the visible window; task/program reads page past server
+  row limits. Added own-program edit mode with retained media, child identity locked, and image
+  compression for replacements. Running recurrence edits create tomorrow's version atomically;
+  unstarted programs and unsubmitted one-offs edit in place. Cancellation is soft and disables
+  reminders/submission. `0017` adds revision/request checks, protects raw history rewrites while
+  preserving the existing stop action, and serializes competing edits/cancellations/submissions.
+  Added deployment instructions; preserved the user's unrelated `.idea/misc.xml` change.
+* **Verified:** Debug APK + Android-test APK build passed; all 388 JVM tests passed; all 9
+  instrumentation tests passed on the Android emulator, including actual parent history/retry/
+  completion navigation and volunteer edit/cancel screens using an in-memory HTTP engine.
+  A disposable PostgreSQL 18 cluster passed the previous notification SQL suite plus history,
+  paging/filter/RLS, recurrence cadence, idempotency, cancellation, stale-version and legacy-stop
+  tests. Separate real connections passed both lock orderings of cancel vs submission and date-edit
+  vs submission. Existing chat lifecycle/recovery and notification-route JVM tests remain green.
+* **Not yet verified:** `0017` has not been applied to production; no production writes were made.
+  New FCM delivery on physical devices, real media replacement uploads and end-to-end production
+  deployment were not tested. Existing video compression limitations are unchanged. This branch
+  depends on still-open PR #21; merge that PR first. No direct push to master and no PR merge.
+
 
 ### [2026-10-25] - Recoverable Loads, Preserved Navigation, Live Chat Refresh and Task Notifications
 * **What changed:** parent home/history now show honest loading/error states and working retries;

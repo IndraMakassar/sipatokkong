@@ -23,7 +23,7 @@ import java.time.LocalDate
 data class ProgramListUiState(
     val programs: List<Task> = emptyList(),
     val childNames: Map<String, String> = emptyMap(),
-    val today: LocalDate = LocalDate.now(),
+    val today: LocalDate = LocalDate.now(java.time.ZoneId.of("Asia/Makassar")),
     val isLoading: Boolean = true,
     val stoppingId: String? = null,
     /** Id of the program currently being turned into a template, if any. */
@@ -72,7 +72,7 @@ class ProgramListViewModel(
                     it.copy(
                         programs = programs,
                         childNames = names,
-                        today = LocalDate.now(),
+                        today = LocalDate.now(java.time.ZoneId.of("Asia/Makassar")),
                         isLoading = false,
                     )
                 }
@@ -102,6 +102,19 @@ class ProgramListViewModel(
                         )
                     }
                 }
+        }
+    }
+
+    fun cancelTask(task: Task) {
+        if (_uiState.value.stoppingId != null) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(stoppingId = task.id, actionError = null) }
+            try {
+                taskRepository.cancelOneOff(task)
+                _uiState.update { it.copy(stoppingId = null) }
+                refresh()
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { _uiState.update { it.copy(stoppingId = null, actionError = ErrorText.of(e, "Gagal membatalkan tugas")) } }
         }
     }
 

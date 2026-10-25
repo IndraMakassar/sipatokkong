@@ -142,6 +142,7 @@ fun ParentHomeScreen(
     onRetryTasks: () -> Unit = {},
     childName: String = "Almair",
     unreadNotifications: Int = 0,
+    olderTasks: @Composable () -> Unit = {},
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     val title = when (selectedTab) {
@@ -193,6 +194,7 @@ fun ParentHomeScreen(
                     onRetryTasks = onRetryTasks,
                     onOpenTask = onOpenTask,
                     onSeeAllHistory = onSeeAllHistory,
+                    olderTasks = olderTasks,
                 )
                 1 -> FeedbackListScreen(
                     title = "Catatan Perilaku & Feedback",
@@ -219,6 +221,7 @@ private fun BerandaContent(
     onRetryTasks: () -> Unit,
     onOpenTask: (String, LocalDate) -> Unit,
     onSeeAllHistory: () -> Unit,
+    olderTasks: @Composable () -> Unit,
 ) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val greeting by produceState(greetingAt(LocalTime.now()), lifecycle) {
@@ -283,6 +286,7 @@ private fun BerandaContent(
             }
         }
 
+        olderTasks()
 //        TipsCard(childName = childName)
     }
 }

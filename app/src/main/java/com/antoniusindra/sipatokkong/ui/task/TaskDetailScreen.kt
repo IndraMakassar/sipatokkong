@@ -183,6 +183,7 @@ fun TaskDetailScreen(
             if (ui.tugas != null) {
                 SubmitBar(
                     alreadyDone = ui.alreadyDone,
+                    cancelled = ui.tugas?.cancelledAt != null,
                     hasProof = ui.proofUri != null,
                     isSubmitting = ui.isSubmitting,
                     onPick = { showSourceChoice = true },
@@ -304,7 +305,9 @@ internal fun DetailBody(
             }
         }
 
-        if (ui.alreadyDone) {
+        if (ui.tugas?.cancelledAt != null) {
+            Text("Tugas ini dibatalkan oleh relawan.", color = MaterialTheme.colorScheme.error)
+        } else if (ui.alreadyDone) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = BrandTeal)
                 Spacer(Modifier.size(8.dp))
@@ -618,6 +621,7 @@ private fun ProofSourceDialog(
 @Composable
 private fun SubmitBar(
     alreadyDone: Boolean,
+    cancelled: Boolean,
     hasProof: Boolean,
     isSubmitting: Boolean,
     onPick: () -> Unit,
@@ -627,7 +631,7 @@ private fun SubmitBar(
         Box(Modifier.padding(16.dp)) {
             Button(
                 onClick = onSubmit,
-                enabled = !alreadyDone && !isSubmitting,
+                enabled = !alreadyDone && !cancelled && !isSubmitting,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
@@ -638,6 +642,7 @@ private fun SubmitBar(
                         strokeWidth = 2.dp,
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
+                    cancelled -> Text("Dibatalkan")
                     alreadyDone -> Text("Sudah Selesai")
                     // One label, one meaning. Left ENABLED without proof on purpose: tapping it
                     // then produces "Pilih foto/video bukti terlebih dahulu.", which points at the
