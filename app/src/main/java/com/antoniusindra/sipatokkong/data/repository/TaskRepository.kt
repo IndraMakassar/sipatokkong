@@ -103,15 +103,15 @@ class TaskRepository(private val client: SupabaseClient) {
             .decodeList()
 
     /**
-     * One completion, including the `dokumentasi_id` that links to the proof the parent sent.
+     * One completion, including the proof link and volunteer evaluation shown to the parent.
      *
      * Kept apart from [completionsForCurrentUser] on purpose: that one loads every completion for
-     * the home screen, and carrying a third column there would cost data on every entry to buy
+     * the home screen, and carrying detail-only fields there would cost data on every entry to buy
      * something only the detail screen uses.
      */
     suspend fun completionFor(tugasId: String, occurrenceDate: String): TaskCompletion? =
         client.postgrest.from("tugas_penyelesaian")
-            .select(columns = Columns.list("tugas_id", "occurrence_date", "dokumentasi_id")) {
+            .select(columns = Columns.list("tugas_id", "occurrence_date", "dokumentasi_id", "feedback_relawan")) {
                 filter {
                     eq("tugas_id", tugasId)
                     eq("occurrence_date", occurrenceDate)

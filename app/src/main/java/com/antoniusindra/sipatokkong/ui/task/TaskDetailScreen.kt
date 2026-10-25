@@ -218,7 +218,7 @@ fun TaskDetailScreen(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DetailBody(
+internal fun DetailBody(
     modifier: Modifier,
     ui: TaskDetailUiState,
     download: MediaDownloadState,

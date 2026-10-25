@@ -27,7 +27,8 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
         toggle, move a child to another parent, add/remove volunteer assignments.
 *   **Parent Features:**
     *   Home dashboard with task summary and status.
-    *   Task detail view.
+    *   Task detail view, including volunteer evaluations on completed occurrences.
+    *   Local-time greeting (pagi/siang/sore/malam), refreshed on resume and every minute while visible.
     *   Feedback/Behavior note list and submission form.
     *   Notification inbox reading the real `notifications` table: unread styling, mark-as-read on
         tap, "Tandai semua" for the whole inbox, "Muat lebih banyak" past the first 50, a deep link
@@ -303,6 +304,52 @@ child so `is_parent_of` admits their parent.
     of this limitation that remains true.
 
 ## Change Log
+
+### [2026-10-25] - Parent Evaluations and Greetings Follow the Actual Data and Time
+* **What changed:** `TaskRepository.completionFor()` now requests `feedback_relawan` alongside
+    the completion's proof link; the home-list query remains narrow. The existing detail screen
+    can therefore display the volunteer's evaluation. Replaced the parent's fixed greeting with
+    device-local time: morning 05:00–10:59, midday 11:00–14:59, afternoon 15:00–17:59, night
+    18:00–04:59. It refreshes immediately when resumed and every minute while started.
+* **Regression coverage:** A real repository request against a local HTTP projection fixture
+    reproduced the old bug (evaluation returned null) before the query fix. Added date-isolation
+    coverage, 12 greeting cases including boundaries/midnight, and two Compose device tests for
+    displaying an evaluation without proof media and omitting the card when no evaluation exists.
+    Made the detail body internal for the UI tests, using the existing debug-only Compose test host.
+* **Verified:** `:app:assembleDebug :app:testDebugUnitTest :app:connectedDebugAndroidTest`
+    succeeded: 375 unit tests and 3 device tests, zero failures/errors/skips, on `Medium_Phone`
+    (Android 17 / API 37). The first UI run exposed an old Espresso reflection call incompatible
+    with API 37; upgrading test-only Espresso 3.5.1 → 3.7.0 and AndroidX JUnit 1.1.5 → 1.3.0
+    resolved it. The installed app showed "Selamat sore," at device time 17:23. A real completed
+    task and its proof section opened successfully; the application PID's log had no error,
+    fatal exception, or ANR. A read-only authenticated query confirmed the live feedback column
+    exists (HTTP 200), but all three completions visible to this parent had null evaluations.
+    Instrumentation cleans up the target installation; the app was reinstalled and the existing
+    parent authentication preference restored afterward.
+* **Not yet verified:** A volunteer writing an evaluation and that same text appearing for the
+    parent against the live backend, other Android versions, physical devices, and release builds.
+    Evaluation display was checked on-device with controlled test data. Greeting boundaries were
+    tested with local times, not by changing the emulator clock. No live task/evaluation rows or
+    database schema were changed.
+
+### [2026-10-25] - Local Build, Unit Tests, and Parent Runtime Smoke Test
+* **What changed:** Recorded verification of master commit `6f83064`; no application source or
+    database schema changes were made. Recorded the omitted parent-evaluation query field in
+    Known Limitations.
+* **Verified:** `:app:assembleDebug :app:testDebugUnitTest` succeeded using the cached JDK 21:
+    361 tests across 25 suites, zero failures/errors/skips. Installed the resulting debug APK
+    over the existing app on the `Medium_Phone` emulator (Android 17 / API 37). Cold startup
+    restored the existing parent session. Opened home, history, behavior-note list and thread,
+    profile, the real notification inbox, and a task detail through a notification. No fatal
+    exception or application error-level log appeared during those checks. Opening the task
+    notification marked that notification read; no feedback or task completion was submitted.
+* **Warnings:** SDK XML metadata version mismatch and unstripped native debug symbols during
+    build; emulator EGL configuration fallbacks at runtime. These did not prevent build or launch.
+    The home greeting is also hardcoded to "Selamat pagi," regardless of time.
+* **Not yet verified:** Fresh credential login, admin/volunteer sessions, writes/uploads,
+    volunteer evaluation round-trip, actual push delivery, production migration state, physical
+    devices, release builds, and other Android versions. The parent history had no recent
+    completed tasks. Test results do not establish that every feature works end to end.
 
 ### [2026-09-15] - Task Submission Monitoring and Feedback for Volunteers
 * **What changed:** Added a fully integrated "Pantau Tugas Anak" feature for volunteer therapists to track parent task execution proofs and provide feedback.

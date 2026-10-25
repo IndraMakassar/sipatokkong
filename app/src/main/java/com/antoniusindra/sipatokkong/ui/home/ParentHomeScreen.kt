@@ -42,6 +42,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,6 +58,10 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import com.antoniusindra.sipatokkong.core.util.greetingAt
 import com.antoniusindra.sipatokkong.data.model.Profile
 import com.antoniusindra.sipatokkong.data.model.Task
 import com.antoniusindra.sipatokkong.data.model.TaskOccurrence
@@ -80,8 +85,11 @@ import com.antoniusindra.sipatokkong.ui.theme.StatusRedText
 import com.antoniusindra.sipatokkong.ui.theme.StatusTealBg
 import com.antoniusindra.sipatokkong.ui.theme.StatusTealText
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 // ---------------------------------------------------------------------------
 // Local brand palette — scoped to this screen so it matches the mockup exactly
@@ -204,6 +212,16 @@ private fun BerandaContent(
     onOpenTask: (String, LocalDate) -> Unit,
     onSeeAllHistory: () -> Unit,
 ) {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val greeting by produceState(greetingAt(LocalTime.now()), lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            // Refresh immediately after returning to the app, and while the home stays open.
+            while (isActive) {
+                value = greetingAt(LocalTime.now())
+                delay(60_000L)
+            }
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -213,7 +231,7 @@ private fun BerandaContent(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.padding(top = 12.dp)) {
-            Text("Selamat pagi,", style = MaterialTheme.typography.bodyMedium, color = MutedText)
+            Text("$greeting,", style = MaterialTheme.typography.bodyMedium, color = MutedText)
             Text("Halo, ${profile.fullName}!", fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
 
