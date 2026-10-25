@@ -14,14 +14,7 @@ private const val TYPE_FEEDBACK_BALASAN = "feedback_balasan"
 private const val ENTITY_FEEDBACK = "feedback"
 private const val ENTITY_TUGAS = "tugas"
 
-/**
- * Notification kinds as an inbox draws them.
- *
- * A deliberately smaller set than the Postgres enum `notif_type`, which declares six values, three
- * of which nothing writes. The three that are written split cleanly by role: a parent receives
- * `tugas_baru` and `feedback_balasan`, a volunteer receives only `feedback_baru` -- the one kind
- * `on_feedback_insert` fans out over `anak_relawan`. No role sees all three.
- */
+/** Notification kinds drawn by the inbox. Unknown database values keep the generic fallback. */
 enum class NotifType {
     TUGAS_BARU,
 
@@ -35,6 +28,8 @@ enum class NotifType {
      */
     TUGAS_REMINDER,
 
+    TUGAS_SETORAN,
+    TUGAS_EVALUASI,
     FEEDBACK_BARU,
     FEEDBACK_BALASAN,
 
@@ -70,6 +65,9 @@ sealed interface NotifTarget {
      * recurrence rule when it is absent.
      */
     data class TaskDetail(val tugasId: String) : NotifTarget
+
+    /** The exact completion; the destination uses the signed-in role to choose its screen. */
+    data class SubmissionDetail(val submissionId: String) : NotifTarget
 
     /** Nothing to open. The row still marks itself read when tapped. */
     data object None : NotifTarget
@@ -131,6 +129,8 @@ object NotifDisplay {
      * generic icon, where an unknown enum constant would have cost the entire list.
      */
     fun kindOf(type: String?): NotifType = when (type) {
+        "tugas_setoran" -> NotifType.TUGAS_SETORAN
+        "tugas_evaluasi" -> NotifType.TUGAS_EVALUASI
         TYPE_TUGAS_BARU -> NotifType.TUGAS_BARU
         TYPE_TUGAS_REMINDER -> NotifType.TUGAS_REMINDER
         TYPE_FEEDBACK_BARU -> NotifType.FEEDBACK_BARU
@@ -163,6 +163,7 @@ object NotifDisplay {
         if (id.isEmpty()) return NotifTarget.None
         return when (entityTable) {
             ENTITY_FEEDBACK -> NotifTarget.FeedbackThread(id)
+            "tugas_penyelesaian" -> NotifTarget.SubmissionDetail(id)
             ENTITY_TUGAS -> NotifTarget.TaskDetail(id)
             else -> NotifTarget.None
         }
@@ -317,6 +318,8 @@ object NotifDisplay {
     const val MAX_TITLE_CHARS = 80
 
     private fun fallbackTitleFor(kind: NotifType): String = when (kind) {
+        NotifType.TUGAS_SETORAN -> "Setoran tugas baru"
+        NotifType.TUGAS_EVALUASI -> "Evaluasi tugas baru"
         NotifType.TUGAS_BARU -> FALLBACK_TITLE_TUGAS
         NotifType.TUGAS_REMINDER -> FALLBACK_TITLE_REMINDER
         NotifType.FEEDBACK_BARU -> FALLBACK_TITLE_FEEDBACK_BARU

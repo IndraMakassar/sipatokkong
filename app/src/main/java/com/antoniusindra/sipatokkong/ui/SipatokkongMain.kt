@@ -294,6 +294,8 @@ fun SipatokkongMain(
                             weekTotal = parentState.weekTotal,
                             today = parentState.today,
                             isLoadingTasks = parentState.isLoading,
+                            taskError = parentState.error,
+                            onRetryTasks = parentVm::refresh,
                             childName = parentState.childName ?: "anak Anda",
                             unreadNotifications = parentState.unreadNotifications,
                         )
@@ -303,6 +305,7 @@ fun SipatokkongMain(
                     NotificationScreen(
                         onBack = { navController.popBackStack() },
                         onOpenFeedbackThread = { id -> navController.navigate("feedback_thread/$id") },
+                        onOpenSubmission = { id -> navController.navigate("submission_detail/$id") },
                         onOpenTask = { id -> navController.navigate("tugas_detail/$id") },
                     )
                 }
@@ -314,6 +317,9 @@ fun SipatokkongMain(
                         LaunchedEffect(Unit) { parentVm.refresh() }
                         ParentHistoryScreen(
                             history = parentState.history,
+                            isLoading = parentState.isLoading,
+                            error = parentState.error,
+                            onRetry = parentVm::refresh,
                             today = parentState.today,
                             onBack = { navController.popBackStack() },
                             onOpenTask = { id, date ->
@@ -451,12 +457,13 @@ fun SipatokkongMain(
                     NotificationScreen(
                         onBack = { navController.popBackStack() },
                         onOpenFeedbackThread = { id -> navController.navigate("feedback_thread/$id") },
+                        onOpenSubmission = { id -> navController.navigate("submission_detail/$id") },
                         // No onOpenTask, and not an oversight: on_tugas_insert writes the row to
                         // the child's `orangtua_id`, so no volunteer can hold a `tugas`
                         // notification. Wiring one would point a volunteer at a parent-only screen.
                         //
-                        // Only feedback_baru ever reaches a relawan, so name that and nothing else.
-                        emptyText = "Catatan baru dari orang tua akan muncul di sini.",
+                        // Volunteers receive both feedback and task-submission notifications.
+                        emptyText = "Catatan dan setoran tugas dari orang tua akan muncul di sini.",
                     )
                 }
                 composable("volunteer_programs") {
@@ -511,10 +518,17 @@ fun SipatokkongMain(
                 }
                 composable("submission_detail/{submissionId}") { backStackEntry ->
                     val subId = backStackEntry.arguments?.getString("submissionId").orEmpty()
-                    SubmissionDetailScreen(
-                        submissionId = subId,
-                        onBack = { navController.popBackStack() }
-                    )
+                    when ((sessionState as? SessionManager.State.SignedIn)?.profile?.role) {
+                        UserRole.ORANGTUA -> TaskDetailScreen(
+                            tugasId = null, occurrenceDate = null, completionId = subId,
+                            onBack = { navController.popBackStack() },
+                        )
+                        UserRole.RELAWAN, UserRole.ADMIN -> SubmissionDetailScreen(
+                            submissionId = subId,
+                            onBack = { navController.popBackStack() },
+                        )
+                        null -> Unit
+                    }
                 }
             }
     }

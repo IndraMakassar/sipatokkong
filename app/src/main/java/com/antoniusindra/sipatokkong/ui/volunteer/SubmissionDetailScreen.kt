@@ -71,6 +71,9 @@ fun SubmissionDetailScreen(
     val context = LocalContext.current
 
     LaunchedEffect(submissionId) {
+        androidx.core.app.NotificationManagerCompat.from(context).cancel(
+            com.antoniusindra.sipatokkong.core.push.PushPayload.trayIdForEntity(submissionId)
+        )
         viewModel.load(submissionId)
     }
 

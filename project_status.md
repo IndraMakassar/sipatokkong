@@ -19,14 +19,16 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
     `0012` calls `notif_snippet` which only `0010` creates. No migration file records itself in
     `schema_migrations`; every entry so far was written by hand. The old duplicate-`0005`
     collision is resolved (`0007_presensi_unik_harian`).
-*   **Authentication:** Phone Number + PIN login flow mapped to Supabase Auth. Role-based routing (Admin, Parent, Volunteer).
+*   **Authentication:** Email + password login through Supabase Auth, with role-based routing (Admin, Parent, Volunteer). Phone + PIN remains a product intention, not the implemented login UI.
 *   **Admin Features:**
     *   Create Parent/Volunteer accounts (via `noSessionClient` to preserve admin session).
     *   Create Child profiles and link them to parents.
     *   Manage & edit accounts and children: searchable lists, edit forms, active/inactive
         toggle, move a child to another parent, add/remove volunteer assignments.
 *   **Parent Features:**
-    *   Home dashboard with task summary and status.
+    *   Home dashboard with task summary and status. Home/history distinguish loading, failed reads,
+        and empty results, with retry actions. Previous list contents survive a failed refresh.
+    *   Parent and volunteer bottom tabs survive navigation to a detail/form and back.
     *   Task detail view, including volunteer evaluations on completed occurrences.
     *   Local-time greeting (pagi/siang/sore/malam), refreshed on resume and every minute while visible.
     *   Feedback/Behavior note list and submission form.
@@ -50,8 +52,18 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 *   **Branding:** Custom app icon and splash screen using the official Sipatokkong logo.
 *   **Communication:** Feedback threads for parent-volunteer interaction, with one-tap quick
     replies for the volunteer and a triaged inbox ("Perlu Ditanggapi" / "Sudah Beres").
+    The open thread refreshes immediately on resume, then every 10 seconds after each refresh.
+    Polling stops below RESUMED and cancels its in-flight read. Failed refreshes retain messages
+    and drafts; initial failures offer Retry. Refreshes serialize with post-send reloads.
 
 ### 🚧 In Progress / Partially Built
+*   **Task submission/evaluation notifications:** client routing and migrations `0015`/`0016`
+    are implemented and tested locally, **not applied to production**. Submission notifications
+    go to the task author, evaluations to the submitting parent. Both use the completion id,
+    so inbox and push taps open the exact occurrence even outside the parent's 30-day history.
+    Install the new APK before enabling the producers. Commit `0015` before applying `0016`;
+    new PostgreSQL enum values cannot be used in the same transaction that adds them.
+    The existing push trigger/function needs no changes. No historical notification backfill.
 *   **Media Compression:** Wired up for the presensi photo **and** the parent's task proof
     (`core/media/ImageCompressor`, images only). The `tugas-demo` upload and any **video** proof
     still send raw bytes; `LightCompressor` (video) is still unused.
@@ -88,7 +100,7 @@ Sipatokkong is an Android application using **Jetpack Compose** and **Supabase**
 ## Domain Constraints
 *   **Low Literacy:** UI must be visual-heavy with clear, simple Bahasa Indonesia labels. Mandatory demo videos/photos for tasks.
 *   **Low Bandwidth:** Data frugality is a hard requirement. Media must be compressed before upload.
-*   **Simple Access:** No email/password registration. Account creation is restricted to Admins; login is via Phone + PIN.
+*   **Simple Access:** Account creation is restricted to Admins. Current login uses email + password; the intended Phone + PIN flow has not been implemented.
 
 ## Product Rules
 
@@ -304,6 +316,38 @@ child so `is_parent_of` admits their parent.
     of this limitation that remains true.
 
 ## Change Log
+
+### [2026-10-25] - Recoverable Loads, Preserved Navigation, Live Chat Refresh and Task Notifications
+* **What changed:** parent home/history now show honest loading/error states and working retries;
+  task details can retry without leaving or losing form data. Parent and volunteer tabs are saved
+  across detail navigation. Feedback threads refresh every 10 seconds only while RESUMED, preserve
+  messages and drafts on failed refreshes, and serialize reads with the refresh after sending.
+  Stable child/parent names are reused rather than fetched every poll. The poll rereads the thread
+  and reply list, so it also sees status changes and does not miss late-committing replies.
+* **Notification delivery:** new `tugas_setoran`/`tugas_evaluasi` kinds point to
+  `tugas_penyelesaian.id`. The shared submission route renders the volunteer review screen or the
+  parent's exact dated task according to the signed-in role. Unchanged/blank evaluations do not
+  notify; real edits do. Task detail reads one completion, and optional media failures no longer
+  discard an already-read evaluation. Existing one-off completion status updates remain intact.
+* **Verified:** debug APK build; 384 JVM tests, including real repository HTTP fixtures for initial
+  failure/retry, incoming replies, preserving drafts through failed refreshes, and historical
+  evaluation routes. Lifecycle tests cover pause/resume, no overlapping polls, and cancellation.
+  Six instrumentation tests passed on Android 17/API 37, including home/history error/retry states,
+  stale list retention, and evaluation display. New SQL migrations passed in an isolated local
+  PostgreSQL 18 database using the repository's base schema/RLS and platform stand-ins: recipients,
+  duplicate attempts, blank/no-op edits, exact completion pointers, role access, no backfill, and
+  preserving existing one-off versus recurring completion behavior.
+* **Verified on the running app:** offline Home and History show Retry instead of empty states;
+  a loaded feedback thread retains its content while offline and recovers automatically when
+  connectivity returns, without a button press. Back returns to the Catatan tab. A read-only
+  completion link opened the existing 27 July occurrence as completed, including its proof,
+  rather than choosing the current date. No user content was written to the live backend.
+* **Deployment / not yet verified:** `0015` and `0016` have NOT been applied to production.
+  Commit `0015` before `0016`, and distribute the compatible APK before enabling the new producers.
+  Real FCM delivery for the two new kinds and a live two-account submission/evaluation round trip
+  still require deployment. No production messages or test submissions were created for verification.
+  Phone + PIN claims in the status summary were corrected to the existing email/password UI.
+
 
 ### [2026-10-25] - Parent Evaluations and Greetings Follow the Actual Data and Time
 * **What changed:** `TaskRepository.completionFor()` now requests `feedback_relawan` alongside

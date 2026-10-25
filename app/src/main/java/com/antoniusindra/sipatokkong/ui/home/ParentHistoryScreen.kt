@@ -18,6 +18,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.CircularProgressIndicator
+import com.antoniusindra.sipatokkong.ui.components.ErrorRetry
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -40,6 +42,9 @@ fun ParentHistoryScreen(
     today: LocalDate,
     onBack: () -> Unit,
     onOpenTask: (String, LocalDate) -> Unit,
+    isLoading: Boolean = false,
+    error: String? = null,
+    onRetry: () -> Unit = {},
 ) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -70,7 +75,14 @@ fun ParentHistoryScreen(
                 .padding(top = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            if (completed.isEmpty()) {
+            if (isLoading) {
+                Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else if (error != null) {
+                ErrorRetry(message = error, onRetry = onRetry)
+            }
+            if (completed.isEmpty() && !isLoading && error == null) {
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
                     contentAlignment = Alignment.Center
