@@ -21,9 +21,12 @@ import io.github.jan.supabase.storage.storage
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
+import kotlinx.serialization.json.*
+import com.antoniusindra.sipatokkong.data.model.TaskPageRow
 import kotlin.time.Duration.Companion.hours
 
 class TaskRepository(private val client: SupabaseClient) {
+    private val editJson = Json { encodeDefaults = true }
 
     // ---- Relawan: create a tugas (with demo media) ----
 
@@ -53,10 +56,17 @@ class TaskRepository(private val client: SupabaseClient) {
     // ---- Orang tua: read tasks + complete them ----
 
     /** Tasks visible to the current user. RLS scopes this to the parent's child(ren). */
-    suspend fun tasksForCurrentUser(): List<Task> =
-        client.postgrest.from("tugas")
-            .select { order("created_at", Order.DESCENDING) }
-            .decodeList()
+    suspend fun tasksForCurrentUser(): List<Task> {
+        val rows = mutableListOf<Task>()
+        do {
+            val page = client.postgrest.from("tugas").select {
+                order("created_at", Order.DESCENDING); order("id", Order.DESCENDING)
+                range(rows.size.toLong(), rows.size.toLong() + 499)
+            }.decodeList<Task>()
+            rows.addAll(page)
+        } while (page.size == 500)
+        return rows
+    }
 
     suspend fun getTask(id: String): Task? =
         client.postgrest.from("tugas")
@@ -97,9 +107,11 @@ class TaskRepository(private val client: SupabaseClient) {
      * Which occurrences are already done, for the tasks the current user can see.
      * RLS `penyelesaian_select` scopes this to the parent's own rows (or the volunteer's tasks).
      */
-    suspend fun completionsForCurrentUser(): List<TaskCompletion> =
+    suspend fun completionsForCurrentUser(from: String? = null, to: String? = null): List<TaskCompletion> =
         client.postgrest.from("tugas_penyelesaian")
-            .select(columns = Columns.list("tugas_id", "occurrence_date"))
+            .select(columns = Columns.list("tugas_id", "occurrence_date")) {
+                filter { from?.let { gte("occurrence_date", it) }; to?.let { lte("occurrence_date", it) } }
+            }
             .decodeList()
 
     /**
@@ -151,10 +163,7 @@ class TaskRepository(private val client: SupabaseClient) {
     }
 
     /** Programs created by the signed-in volunteer. RLS `tugas_select` already limits the rows. */
-    suspend fun programsForCurrentVolunteer(): List<Task> =
-        client.postgrest.from("tugas")
-            .select { order("created_at", Order.DESCENDING) }
-            .decodeList()
+    suspend fun programsForCurrentVolunteer(): List<Task> = tasksForCurrentUser()
 
     /**
      * Stops a recurring program: no occurrences are generated from this day on.
@@ -216,6 +225,31 @@ class TaskRepository(private val client: SupabaseClient) {
      */
     suspend fun copyTemplateToDemo(fromPath: String, anakId: String): String =
         copyBetween("tugas-template", "tugas-demo", fromPath, anakId)
+
+    suspend fun historyPage(from: String?, to: String?, cursor: TaskPageRow?): List<TaskPageRow> =
+        client.postgrest.rpc("parent_task_history", buildJsonObject {
+            from?.let { put("p_from", it) }; to?.let { put("p_to", it) }
+            cursor?.let { put("p_cursor_date", it.occurrenceDate); put("p_cursor_id", it.id) }
+        }).decodeList()
+
+    suspend fun oldOverduePage(before: String, cursor: TaskPageRow?): List<TaskPageRow> =
+        client.postgrest.rpc("parent_old_overdue", buildJsonObject {
+            put("p_before", before)
+            cursor?.let { put("p_cursor_date", it.occurrenceDate); put("p_cursor_id", it.id) }
+        }).decodeList()
+
+    suspend fun editProgram(task: Task, requestId: String, changes: TaskInsert) {
+        client.postgrest.rpc("edit_program", buildJsonObject {
+            put("p_task_id", task.id); put("p_revision", task.revision); put("p_request_id", requestId)
+            put("p_changes", editJson.encodeToJsonElement(TaskInsert.serializer(), changes))
+        })
+    }
+
+    suspend fun cancelOneOff(task: Task) {
+        client.postgrest.rpc("cancel_one_off", buildJsonObject {
+            put("p_task_id", task.id); put("p_revision", task.revision)
+        })
+    }
 
     // ---- shared ----
 

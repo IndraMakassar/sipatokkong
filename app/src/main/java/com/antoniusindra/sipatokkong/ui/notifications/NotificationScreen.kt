@@ -99,13 +99,14 @@ fun NotificationScreen(
      * resolves it from the task's own recurrence rule. See [NotifDisplay.targetOf].
      */
     onOpenTask: (String) -> Unit = {},
+    onOpenSubmission: (String) -> Unit = {},
     /**
      * The line under "Belum ada notifikasi". Parent-voiced by default, because the parent is the
      * only role that receives more than one kind: `on_tugas_insert` and `on_balasan_insert` both
      * write to `orangtua_id`, so promising a volunteer "pengingat tugas" here would describe a row
      * the database will never write them.
      */
-    emptyText: String = "Pengingat tugas & balasan feedback akan muncul di sini.",
+    emptyText: String = "Pengingat tugas, evaluasi, dan balasan feedback akan muncul di sini.",
     viewModel: NotificationViewModel = viewModel(factory = NotificationViewModel.Factory),
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
@@ -123,6 +124,7 @@ fun NotificationScreen(
         when (val target = notif.target) {
             is NotifTarget.FeedbackThread -> onOpenFeedbackThread(target.feedbackId)
             is NotifTarget.TaskDetail -> onOpenTask(target.tugasId)
+            is NotifTarget.SubmissionDetail -> onOpenSubmission(target.submissionId)
             NotifTarget.None -> Unit
         }
     }
@@ -349,6 +351,8 @@ private fun iconFor(type: NotifType): Triple<ImageVector, Color, Color> = when (
     NotifType.TUGAS_REMINDER -> Triple(Icons.Filled.Alarm, TaskBoxBg, TaskTint)
     // Deliberately not Chat: that is FEEDBACK_BALASAN's glyph below, and two branches drawing the
     // same icon invite a later "simplification" that merges two kinds which are not the same thing.
+    NotifType.TUGAS_SETORAN -> Triple(Icons.AutoMirrored.Filled.Assignment, TaskBoxBg, TaskTint)
+    NotifType.TUGAS_EVALUASI -> Triple(Icons.Filled.Feedback, ReplyBoxBg, ReplyTint)
     NotifType.FEEDBACK_BARU -> Triple(Icons.Filled.Feedback, NoteBoxBg, NoteTint)
     NotifType.FEEDBACK_BALASAN -> Triple(Icons.AutoMirrored.Filled.Chat, ReplyBoxBg, ReplyTint)
     NotifType.LAINNYA -> Triple(Icons.Filled.Notifications, IconBoxBg, MutedText)

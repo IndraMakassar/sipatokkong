@@ -37,6 +37,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.antoniusindra.sipatokkong.core.util.pollWhileResumed
+import com.antoniusindra.sipatokkong.ui.components.ErrorRetry
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -88,7 +91,10 @@ fun FeedbackThreadScreen(
         NotificationManagerCompat.from(trayContext).cancel(PushPayload.trayIdForEntity(feedbackId))
     }
 
-    LaunchedEffect(feedbackId) { viewModel.load(feedbackId) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(feedbackId, lifecycle) {
+        lifecycle.pollWhileResumed { viewModel.refresh(feedbackId) }
+    }
 
     Scaffold(
         containerColor = AppBackground,
@@ -136,9 +142,9 @@ fun FeedbackThreadScreen(
             ui.isLoading && ui.feedback == null ->
                 Box(Modifier.fillMaxSize().padding(innerPadding), Alignment.Center) { CircularProgressIndicator() }
 
-            ui.loadError != null ->
+            ui.loadError != null && ui.feedback == null ->
                 Box(Modifier.fillMaxSize().padding(innerPadding), Alignment.Center) {
-                    Text(ui.loadError!!, color = MaterialTheme.colorScheme.error)
+                    ErrorRetry(ui.loadError!!, viewModel::retry)
                 }
 
             ui.feedback != null -> Column(
@@ -149,6 +155,13 @@ fun FeedbackThreadScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (ui.loadError != null) {
+                    Text(
+                        "${ui.loadError} Percakapan akan diperbarui otomatis.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 FeedbackDetailCard(ui.feedback!!, ui.who, today)
 
                 if (ui.replies.isEmpty()) {

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.antoniusindra.sipatokkong.data.model.Profile
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
 import com.antoniusindra.sipatokkong.core.util.ErrorText
@@ -15,6 +16,9 @@ import com.antoniusindra.sipatokkong.data.model.UserRole
 import com.antoniusindra.sipatokkong.data.repository.ChildRepository
 import com.antoniusindra.sipatokkong.data.repository.FeedbackRepository
 import com.antoniusindra.sipatokkong.data.repository.ProfileRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,63 +49,68 @@ class FeedbackThreadViewModel(
     private val feedbackRepository: FeedbackRepository,
     private val childRepository: ChildRepository,
     private val profileRepository: ProfileRepository,
-    private val sessionManager: SessionManager,
+    private val currentProfile: () -> Profile?,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(FeedbackThreadUiState())
     val uiState: StateFlow<FeedbackThreadUiState> = _uiState.asStateFlow()
 
     private var feedbackId: String? = null
-    private var loaded = false
+    private val refreshMutex = Mutex()
 
-    fun load(id: String) {
-        if (loaded) return
-        loaded = true
+    /** Called by the screen's RESUMED lifecycle coroutine; cancellation stops the HTTP reads. */
+    suspend fun refresh(id: String) {
         feedbackId = id
-        val signed = sessionManager.state.value as? SessionManager.State.SignedIn
+        val profile = currentProfile()
         _uiState.update {
-            it.copy(myId = signed?.profile?.id, isParent = signed?.profile?.role == UserRole.ORANGTUA)
+            it.copy(myId = profile?.id, isParent = profile?.role == UserRole.ORANGTUA)
         }
         fetch()
     }
 
-    private fun fetch() {
-        val id = feedbackId ?: return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, loadError = null) }
-            val viewerIsParent = _uiState.value.isParent
-            runCatching {
-                val fb = feedbackRepository.get(id) ?: error("Feedback tidak ditemukan.")
-                // The three reads that follow are independent of each other, so they go in
-                // parallel -- same idiom and same justification as VolunteerHomeViewModel. They
-                // cannot start before `fb` lands, because the ids they need are on it.
-                coroutineScope {
-                    val replies = async { feedbackRepository.replies(id) }
-                    // getChild, not childrenForCurrentVolunteer: the latter filters is_active, so a
-                    // note about a child who has since left the programme would lose its name --
-                    // and that is exactly the old note whose context is hardest to reconstruct.
-                    val child = async { runCatching { childRepository.getChild(fb.anakId) }.getOrNull() }
-                    // Skipped for a parent: it is their own name, and this is a round trip.
-                    val parent = async {
-                        if (viewerIsParent) null
-                        else runCatching { profileRepository.getProfile(fb.orangtuaId) }.getOrNull()
-                    }
-                    Loaded(fb, replies.await(), child.await()?.nama, parent.await()?.fullName)
+    fun retry() {
+        viewModelScope.launch { fetch() }
+    }
+
+    private suspend fun fetch() = refreshMutex.withLock {
+        val id = feedbackId ?: return@withLock
+        val previous = _uiState.value
+        _uiState.update { it.copy(isLoading = it.feedback == null) }
+        try {
+            val fb = feedbackRepository.get(id) ?: error("Feedback tidak ditemukan.")
+            val loaded = coroutineScope {
+                val replies = async { feedbackRepository.replies(id) }
+                // Names are stable context. Do not download profiles every ten seconds.
+                val child = async {
+                    previous.childName ?: optionalName { childRepository.getChild(fb.anakId)?.nama }
                 }
-            }.onSuccess { loaded ->
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        feedback = loaded.feedback,
-                        replies = loaded.replies,
-                        childName = loaded.childName,
-                        parentName = loaded.parentName,
-                    )
+                val parent = async {
+                    if (previous.isParent) null else previous.parentName
+                        ?: optionalName { profileRepository.getProfile(fb.orangtuaId)?.fullName }
                 }
-            }.onFailure { e ->
-                _uiState.update { it.copy(isLoading = false, loadError = ErrorText.of(e, "Gagal memuat")) }
+                Loaded(fb, replies.await(), child.await(), parent.await())
             }
+            _uiState.update {
+                it.copy(
+                    isLoading = false, loadError = null,
+                    feedback = loaded.feedback, replies = loaded.replies,
+                    childName = loaded.childName, parentName = loaded.parentName,
+                )
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Preserve messages and the composer when a background refresh fails.
+            _uiState.update { it.copy(isLoading = false, loadError = ErrorText.of(e, "Gagal memuat")) }
         }
+    }
+
+    private suspend fun optionalName(read: suspend () -> String?): String? = try {
+        read()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        null
     }
 
     fun onReplyChange(v: String) = _uiState.update { it.copy(replyText = v, sendError = null) }
@@ -133,6 +142,8 @@ class FeedbackThreadViewModel(
                 // half-typed message the volunteer decided to send separately.
                 _uiState.update { it.copy(isSending = false, replyText = if (text == null) "" else it.replyText) }
                 fetch() // reload replies + updated status
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.update { it.copy(isSending = false, sendError = ErrorText.of(e, "Gagal mengirim balasan")) }
             }
@@ -160,7 +171,7 @@ class FeedbackThreadViewModel(
                     feedbackRepository = ServiceLocator.feedbackRepository,
                     childRepository = ServiceLocator.childRepository,
                     profileRepository = ServiceLocator.profileRepository,
-                    sessionManager = ServiceLocator.sessionManager,
+                    currentProfile = { (ServiceLocator.sessionManager.state.value as? SessionManager.State.SignedIn)?.profile },
                 )
             }
         }

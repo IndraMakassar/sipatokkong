@@ -51,7 +51,6 @@ import com.antoniusindra.sipatokkong.ui.feedback.CreateFeedbackScreen
 import com.antoniusindra.sipatokkong.ui.feedback.FeedbackListScreen
 import com.antoniusindra.sipatokkong.ui.feedback.FeedbackThreadScreen
 import com.antoniusindra.sipatokkong.ui.home.AdminHomeScreen
-import com.antoniusindra.sipatokkong.ui.home.ParentHistoryScreen
 import com.antoniusindra.sipatokkong.ui.home.ParentHomeScreen
 import com.antoniusindra.sipatokkong.ui.home.ParentHomeViewModel
 import com.antoniusindra.sipatokkong.ui.notifications.NotificationScreen
@@ -289,11 +288,18 @@ fun SipatokkongMain(
                             onOpenFeedbackThread = { id -> navController.navigate("feedback_thread/$id") },
                             onComposeFeedback = { navController.navigate("create_feedback") },
                             onSeeAllHistory = { navController.navigate("parent_history") },
+                            olderTasks = {
+                                com.antoniusindra.sipatokkong.ui.home.OldOverdueTasks(onOpenTask = { id, date ->
+                                    navController.navigate("tugas_detail/$id?occurrenceDate=$date")
+                                })
+                            },
                             occurrencesByDate = parentState.visibleByDate,
                             weekDone = parentState.weekDone,
                             weekTotal = parentState.weekTotal,
                             today = parentState.today,
                             isLoadingTasks = parentState.isLoading,
+                            taskError = parentState.error,
+                            onRetryTasks = parentVm::refresh,
                             childName = parentState.childName ?: "anak Anda",
                             unreadNotifications = parentState.unreadNotifications,
                         )
@@ -303,22 +309,16 @@ fun SipatokkongMain(
                     NotificationScreen(
                         onBack = { navController.popBackStack() },
                         onOpenFeedbackThread = { id -> navController.navigate("feedback_thread/$id") },
+                        onOpenSubmission = { id -> navController.navigate("submission_detail/$id") },
                         onOpenTask = { id -> navController.navigate("tugas_detail/$id") },
                     )
                 }
                 composable("parent_history") {
                     val signedInState = sessionState as? SessionManager.State.SignedIn
                     if (signedInState != null) {
-                        val parentVm: ParentHomeViewModel = viewModel(factory = ParentHomeViewModel.Factory)
-                        val parentState by parentVm.uiState.collectAsState()
-                        LaunchedEffect(Unit) { parentVm.refresh() }
-                        ParentHistoryScreen(
-                            history = parentState.history,
-                            today = parentState.today,
+                        com.antoniusindra.sipatokkong.ui.home.TaskHistoryRoute(
                             onBack = { navController.popBackStack() },
-                            onOpenTask = { id, date ->
-                                navController.navigate("tugas_detail/$id?occurrenceDate=$date")
-                            }
+                            onOpenSubmission = { navController.navigate("submission_detail/$it") },
                         )
                     }
                 }
@@ -451,16 +451,21 @@ fun SipatokkongMain(
                     NotificationScreen(
                         onBack = { navController.popBackStack() },
                         onOpenFeedbackThread = { id -> navController.navigate("feedback_thread/$id") },
+                        onOpenSubmission = { id -> navController.navigate("submission_detail/$id") },
                         // No onOpenTask, and not an oversight: on_tugas_insert writes the row to
                         // the child's `orangtua_id`, so no volunteer can hold a `tugas`
                         // notification. Wiring one would point a volunteer at a parent-only screen.
                         //
-                        // Only feedback_baru ever reaches a relawan, so name that and nothing else.
-                        emptyText = "Catatan baru dari orang tua akan muncul di sini.",
+                        // Volunteers receive both feedback and task-submission notifications.
+                        emptyText = "Catatan dan setoran tugas dari orang tua akan muncul di sini.",
                     )
+                }
+                composable("edit_program/{taskId}") { entry ->
+                    CreateTaskScreen(onBack = { navController.popBackStack() }, editTaskId = entry.arguments?.getString("taskId"))
                 }
                 composable("volunteer_programs") {
                     ProgramListScreen(
+                        onEditProgram = { navController.navigate("edit_program/$it") },
                         onBack = { navController.popBackStack() },
                         onCreateProgram = { navController.navigate("create_program_ajar") },
                     )
@@ -511,10 +516,17 @@ fun SipatokkongMain(
                 }
                 composable("submission_detail/{submissionId}") { backStackEntry ->
                     val subId = backStackEntry.arguments?.getString("submissionId").orEmpty()
-                    SubmissionDetailScreen(
-                        submissionId = subId,
-                        onBack = { navController.popBackStack() }
-                    )
+                    when ((sessionState as? SessionManager.State.SignedIn)?.profile?.role) {
+                        UserRole.ORANGTUA -> TaskDetailScreen(
+                            tugasId = null, occurrenceDate = null, completionId = subId,
+                            onBack = { navController.popBackStack() },
+                        )
+                        UserRole.RELAWAN, UserRole.ADMIN -> SubmissionDetailScreen(
+                            submissionId = subId,
+                            onBack = { navController.popBackStack() },
+                        )
+                        null -> Unit
+                    }
                 }
             }
     }

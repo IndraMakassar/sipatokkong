@@ -90,6 +90,7 @@ object PushPayload {
     fun routeFor(message: PushMessage?): String? = when (val target = message?.target) {
         is NotifTarget.FeedbackThread -> "feedback_thread/${target.feedbackId}"
         is NotifTarget.TaskDetail -> "tugas_detail/${target.tugasId}"
+        is NotifTarget.SubmissionDetail -> "submission_detail/${target.submissionId}"
         NotifTarget.None, null -> null
     }
 
@@ -117,6 +118,7 @@ object PushPayload {
         val seed = when (val target = message?.target) {
             is NotifTarget.FeedbackThread -> target.feedbackId
             is NotifTarget.TaskDetail -> target.tugasId
+            is NotifTarget.SubmissionDetail -> target.submissionId
             NotifTarget.None, null -> null
         } ?: message?.notificationId ?: return FALLBACK_TRAY_ID
         return trayIdForEntity(seed)

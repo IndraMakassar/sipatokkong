@@ -89,7 +89,11 @@ class ParentHomeViewModel(
             _uiState.update { it.copy(isLoading = true, error = null) }
             runCatching {
                 val tasks = taskRepository.tasksForCurrentUser()
-                val completions = taskRepository.completionsForCurrentUser()
+                val windowToday = LocalDate.now()
+                val completions = taskRepository.completionsForCurrentUser(
+                    windowToday.minusDays(ParentHomeUiState.PAST_WINDOW_DAYS).toString(),
+                    windowToday.plusDays(ParentHomeUiState.FUTURE_WINDOW_DAYS).toString(),
+                )
                 val childName = childRepository.childForCurrentParent()?.nama
                 Triple(tasks, completions, childName)
             }.onSuccess { (tasks, completions, childName) ->

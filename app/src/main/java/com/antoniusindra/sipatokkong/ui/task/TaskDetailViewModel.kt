@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.antoniusindra.sipatokkong.data.model.Profile
 import com.antoniusindra.sipatokkong.core.auth.SessionManager
 import com.antoniusindra.sipatokkong.core.di.ServiceLocator
 import com.antoniusindra.sipatokkong.core.media.ImageCompressor
@@ -20,9 +21,10 @@ import com.antoniusindra.sipatokkong.data.model.DocumentationInsert
 import com.antoniusindra.sipatokkong.data.model.MediaKind
 import com.antoniusindra.sipatokkong.data.model.Task
 import com.antoniusindra.sipatokkong.data.model.TaskCompletionInsert
-import com.antoniusindra.sipatokkong.data.model.TaskOccurrences
 import com.antoniusindra.sipatokkong.data.model.WorkDuration
 import com.antoniusindra.sipatokkong.data.repository.TaskRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -58,7 +60,7 @@ data class TaskDetailUiState(
 
 class TaskDetailViewModel(
     private val taskRepository: TaskRepository,
-    private val sessionManager: SessionManager,
+    private val currentProfile: () -> Profile?,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TaskDetailUiState())
@@ -69,6 +71,10 @@ class TaskDetailViewModel(
 
     private var proofExt: String? = null
     private var loaded = false
+    private var taskId: String? = null
+    private var requestedDate: LocalDate? = null
+    private var completionId: String? = null
+    private var loadJob: Job? = null
 
     /** The volunteer's demo media, as a downloadable reference. */
     fun demoRef(): MediaRef? =
@@ -89,22 +95,37 @@ class TaskDetailViewModel(
     fun load(id: String, occurrenceDate: LocalDate?) {
         if (loaded) return
         loaded = true
-        viewModelScope.launch {
+        taskId = id
+        requestedDate = occurrenceDate
+        retry()
+    }
+
+    /** Notifications carry the completion id, preserving the exact day of a recurring task. */
+    fun loadCompletion(id: String) {
+        if (loaded) return
+        loaded = true
+        completionId = id
+        retry()
+    }
+
+    fun retry() {
+        if (loadJob?.isActive == true) return
+        loadJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, loadError = null) }
             runCatching {
+                val completion = completionId?.let {
+                    taskRepository.submissionFor(it) ?: error("Setoran tugas tidak ditemukan.")
+                }
+                val id = completion?.tugasId ?: taskId ?: error("Tugas tidak ditemukan.")
                 val tugas = taskRepository.getTask(id) ?: error("Tugas tidak ditemukan.")
-                val date = occurrenceDate
-                    ?: tugas.toRecurrenceRule().occurrenceNearest(LocalDate.now())
+                val date = completion?.occurrenceDate?.let(LocalDate::parse) ?: requestedDate
+                    ?: (if (tugas.cancelledAt != null) tugas.deadline?.let(LocalDate::parse) ?: LocalDate.now() else tugas.toRecurrenceRule().occurrenceNearest(LocalDate.now()))
                     ?: error(NO_OCCURRENCE)
                 val url = runCatching { taskRepository.signedDemoUrl(tugas.mediaPath) }.getOrNull()
                 // Completion is per date, so a recurring program stays open on other days.
-                val done = TaskOccurrences.isDone(
-                    completions = taskRepository.completionsForCurrentUser(),
-                    taskId = id,
-                    date = date,
-                )
-                val proof = if (done) loadProof(id, date) else null
-                Loaded(tugas, date, url, done, proof?.first, proof?.second, proof?.third)
+                val saved = taskRepository.completionFor(id, date.toString())
+                val proof = saved?.dokumentasiId?.let { loadProof(it) }
+                Loaded(tugas, date, url, saved != null, proof?.first, proof?.second, saved?.feedbackRelawan)
             }.onSuccess { loaded ->
                 _uiState.update {
                     it.copy(
@@ -119,6 +140,7 @@ class TaskDetailViewModel(
                     )
                 }
             }.onFailure { e ->
+                if (e is CancellationException) throw e
                 _uiState.update { it.copy(isLoading = false, loadError = ErrorText.of(e, "Gagal memuat tugas")) }
             }
         }
@@ -135,24 +157,16 @@ class TaskDetailViewModel(
         val feedbackRelawan: String?,
     )
 
-    /**
-     * Reads back the proof the parent already sent for this date.
-     *
-     * Failure is swallowed: the proof is a bonus on an already-complete screen, and an error here
-     * must not stop the task itself from opening. Older completions predate `dokumentasi_id` being
-     * populated, so a null is normal rather than a fault.
-     */
-    private suspend fun loadProof(
-        tugasId: String,
-        occurrenceDate: LocalDate,
-    ): Triple<Documentation?, String?, String?>? = runCatching {
-        val completion = taskRepository.completionFor(tugasId, occurrenceDate.toString())
-        val feedback = completion?.feedbackRelawan
-        val dokumentasiId = completion?.dokumentasiId ?: return@runCatching Triple(null, null, feedback)
-        val doc = taskRepository.getDocumentation(dokumentasiId) ?: return@runCatching Triple(null, null, feedback)
-        val url = runCatching { taskRepository.signedDocumentationUrl(doc.mediaPath) }.getOrNull()
-        Triple(doc, url, feedback)
-    }.getOrNull()
+    /** Media is optional; a media read failure must not discard a successfully read evaluation. */
+    private suspend fun loadProof(documentationId: String): Pair<Documentation?, String?>? = try {
+        val doc = taskRepository.getDocumentation(documentationId)
+        val url = doc?.let { taskRepository.signedDocumentationUrl(it.mediaPath) }
+        doc to url
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        null
+    }
 
     fun onResponseChange(r: ChildResponse) = _uiState.update { it.copy(response = r) }
     fun onDurationChange(d: WorkDuration) = _uiState.update { it.copy(duration = d) }
@@ -185,7 +199,8 @@ class TaskDetailViewModel(
         val s = _uiState.value
         val tugas = s.tugas ?: return
         val occurrenceDate = s.occurrenceDate ?: return
-        val orangtuaId = (sessionManager.state.value as? SessionManager.State.SignedIn)?.profile?.id
+        if (s.tugas?.cancelledAt != null) return
+        val orangtuaId = currentProfile()?.id
         if (s.proofUri == null || s.proofKind == null || proofExt == null) {
             _uiState.update { it.copy(submitError = "Pilih foto/video bukti terlebih dahulu.") }
             return
@@ -287,7 +302,7 @@ class TaskDetailViewModel(
             initializer {
                 TaskDetailViewModel(
                     taskRepository = ServiceLocator.taskRepository,
-                    sessionManager = ServiceLocator.sessionManager,
+                    currentProfile = { (ServiceLocator.sessionManager.state.value as? SessionManager.State.SignedIn)?.profile },
                 )
             }
         }

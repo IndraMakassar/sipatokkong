@@ -85,7 +85,7 @@ private val DetailDateFormat =
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskDetailScreen(
-    tugasId: String,
+    tugasId: String?,
     /**
      * The day to open, or null when the caller has none -- a notification tap, which carries only
      * the task id. The ViewModel then resolves one from the task's recurrence rule.
@@ -93,6 +93,7 @@ fun TaskDetailScreen(
     occurrenceDate: LocalDate?,
     onBack: () -> Unit,
     viewModel: TaskDetailViewModel = viewModel(factory = TaskDetailViewModel.Factory),
+    completionId: String? = null,
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
     val downloadState by viewModel.download.state.collectAsStateWithLifecycle()
@@ -109,11 +110,16 @@ fun TaskDetailScreen(
     // In the composable rather than the ViewModel: the ViewModels here stay free of
     // Android framework types, and a notification is a view concern.
     val trayContext = LocalContext.current
-    LaunchedEffect(tugasId) {
-        NotificationManagerCompat.from(trayContext).cancel(PushPayload.trayIdForEntity(tugasId))
+    LaunchedEffect(tugasId, completionId) {
+        (completionId ?: tugasId)?.let {
+            NotificationManagerCompat.from(trayContext).cancel(PushPayload.trayIdForEntity(it))
+        }
     }
 
-    LaunchedEffect(tugasId, occurrenceDate) { viewModel.load(tugasId, occurrenceDate) }
+    LaunchedEffect(tugasId, occurrenceDate, completionId) {
+        if (completionId != null) viewModel.loadCompletion(completionId)
+        else if (tugasId != null) viewModel.load(tugasId, occurrenceDate)
+    }
     LaunchedEffect(ui.isSuccess) {
         if (ui.isSuccess) {
             Toast.makeText(context, "Bukti terkirim, tugas ditandai selesai!", Toast.LENGTH_SHORT).show()
@@ -177,6 +183,7 @@ fun TaskDetailScreen(
             if (ui.tugas != null) {
                 SubmitBar(
                     alreadyDone = ui.alreadyDone,
+                    cancelled = ui.tugas?.cancelledAt != null,
                     hasProof = ui.proofUri != null,
                     isSubmitting = ui.isSubmitting,
                     onPick = { showSourceChoice = true },
@@ -191,7 +198,7 @@ fun TaskDetailScreen(
             }
 
             ui.loadError != null -> Box(Modifier.fillMaxSize().padding(innerPadding), Alignment.Center) {
-                Text(ui.loadError!!, color = MaterialTheme.colorScheme.error)
+                com.antoniusindra.sipatokkong.ui.components.ErrorRetry(ui.loadError!!, viewModel::retry)
             }
 
             ui.tugas != null -> DetailBody(
@@ -298,7 +305,9 @@ internal fun DetailBody(
             }
         }
 
-        if (ui.alreadyDone) {
+        if (ui.tugas?.cancelledAt != null) {
+            Text("Tugas ini dibatalkan oleh relawan.", color = MaterialTheme.colorScheme.error)
+        } else if (ui.alreadyDone) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = BrandTeal)
                 Spacer(Modifier.size(8.dp))
@@ -612,6 +621,7 @@ private fun ProofSourceDialog(
 @Composable
 private fun SubmitBar(
     alreadyDone: Boolean,
+    cancelled: Boolean,
     hasProof: Boolean,
     isSubmitting: Boolean,
     onPick: () -> Unit,
@@ -621,7 +631,7 @@ private fun SubmitBar(
         Box(Modifier.padding(16.dp)) {
             Button(
                 onClick = onSubmit,
-                enabled = !alreadyDone && !isSubmitting,
+                enabled = !alreadyDone && !cancelled && !isSubmitting,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
@@ -632,6 +642,7 @@ private fun SubmitBar(
                         strokeWidth = 2.dp,
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
+                    cancelled -> Text("Dibatalkan")
                     alreadyDone -> Text("Sudah Selesai")
                     // One label, one meaning. Left ENABLED without proof on purpose: tapping it
                     // then produces "Pilih foto/video bukti terlebih dahulu.", which points at the

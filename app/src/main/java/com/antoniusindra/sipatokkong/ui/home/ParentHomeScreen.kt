@@ -44,6 +44,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +68,7 @@ import com.antoniusindra.sipatokkong.data.model.Task
 import com.antoniusindra.sipatokkong.data.model.TaskOccurrence
 import com.antoniusindra.sipatokkong.data.model.UserRole
 import com.antoniusindra.sipatokkong.ui.components.NotificationBell
+import com.antoniusindra.sipatokkong.ui.components.ErrorRetry
 import com.antoniusindra.sipatokkong.ui.components.RichTextDisplay
 import com.antoniusindra.sipatokkong.ui.feedback.FeedbackListScreen
 import com.antoniusindra.sipatokkong.ui.theme.AppBackground
@@ -136,10 +138,13 @@ fun ParentHomeScreen(
     weekTotal: Int = 0,
     today: LocalDate = LocalDate.now(),
     isLoadingTasks: Boolean = false,
+    taskError: String? = null,
+    onRetryTasks: () -> Unit = {},
     childName: String = "Almair",
     unreadNotifications: Int = 0,
+    olderTasks: @Composable () -> Unit = {},
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     val title = when (selectedTab) {
         0 -> "Sipatokkong"
         1 -> "Catatan Perilaku"
@@ -185,8 +190,11 @@ fun ParentHomeScreen(
                     weekTotal = weekTotal,
                     today = today,
                     isLoadingTasks = isLoadingTasks,
+                    taskError = taskError,
+                    onRetryTasks = onRetryTasks,
                     onOpenTask = onOpenTask,
                     onSeeAllHistory = onSeeAllHistory,
+                    olderTasks = olderTasks,
                 )
                 1 -> FeedbackListScreen(
                     title = "Catatan Perilaku & Feedback",
@@ -209,8 +217,11 @@ private fun BerandaContent(
     weekTotal: Int,
     today: LocalDate,
     isLoadingTasks: Boolean,
+    taskError: String?,
+    onRetryTasks: () -> Unit,
     onOpenTask: (String, LocalDate) -> Unit,
     onSeeAllHistory: () -> Unit,
+    olderTasks: @Composable () -> Unit,
 ) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val greeting by produceState(greetingAt(LocalTime.now()), lifecycle) {
@@ -235,7 +246,12 @@ private fun BerandaContent(
             Text("Halo, ${profile.fullName}!", fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
 
-        WeeklyProgressCard(childName = childName, done = weekDone, total = weekTotal)
+        if (!isLoadingTasks && taskError == null) {
+            WeeklyProgressCard(childName = childName, done = weekDone, total = weekTotal)
+        }
+        if (taskError != null && !isLoadingTasks) {
+            ErrorRetry(message = taskError, onRetry = onRetryTasks)
+        }
 
         SectionHeader(onSeeAllClick = onSeeAllHistory)
 
@@ -244,6 +260,8 @@ private fun BerandaContent(
                 Modifier.fillMaxWidth().padding(24.dp),
                 contentAlignment = Alignment.Center
             ) { CircularProgressIndicator() }
+
+            taskError != null && occurrencesByDate.isEmpty() -> Unit
 
             occurrencesByDate.isEmpty() -> Text(
                 "Belum ada tugas terapi yang perlu dikerjakan.",
@@ -268,6 +286,7 @@ private fun BerandaContent(
             }
         }
 
+        olderTasks()
 //        TipsCard(childName = childName)
     }
 }

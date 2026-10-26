@@ -36,7 +36,7 @@ object TaskOccurrences {
     ): List<TaskOccurrence> {
         val doneKeys = completions.mapTo(mutableSetOf()) { it.tugasId to it.occurrenceDate }
 
-        return tasks.flatMap { task ->
+        return tasks.filter { it.cancelledAt == null }.flatMap { task ->
             task.toRecurrenceRule().occurrencesBetween(from, to).map { date ->
                 TaskOccurrence(
                     task = task,
