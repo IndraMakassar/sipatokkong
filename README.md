@@ -13,12 +13,7 @@ to donors. The whole loop is designed to be **fast, data-frugal, and simple to l
 
 ## Table of Contents
 - [Overview](#overview)
-- [User Flow](#user-flow)
 - [Roles & Features](#roles--features)
-- [Tech Stack](#tech-stack)
-- [Architecture & Security](#architecture--security)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
 - [Project Status & Roadmap](#project-status--roadmap)
 - [License](#license)
 
@@ -38,18 +33,6 @@ Relawan (volunteer) ──creates homework──▶ Orang Tua (parent) ──doe
 
 **Design constraints (hard requirements):** end users are low-income, low-literacy, and low-bandwidth. The app
 must therefore stay lightweight, be frugal with mobile data, and offer a dead-simple login.
-
----
-
-## User Flow
-
-The full flow across all three roles:
-
-![Sipatokkong user flow — Volunteer, Parent, Admin](assests/SIPATOKKONG%20%281%29.jpg)
-
-Parent dashboard reference:
-
-![Parent dashboard mockup](assests/dashboard%20orang%20tua.png)
 
 ---
 
@@ -113,84 +96,6 @@ The parent module, exactly as scoped:
 
 **Bandwidth budget:** media is compressed on-device before upload (target: images ≤ 200 KB, videos ≤ 30 s /
 480p) to respect users' limited data quotas.
-
----
-
-## Architecture & Security
-
-- **Row Level Security (RLS) is the only authorization layer.** The Android client ships with only the public
-  **anon key**, so every access rule is enforced in Postgres via RLS policies and `SECURITY DEFINER` helper
-  functions (`is_admin`, `is_parent_of`, `is_relawan_of`, `can_view_profile`). See
-  [`supabase/migrations/0001_initial_schema.sql`](supabase/migrations/0001_initial_schema.sql).
-- **Login = "Nomor HP + PIN".** The phone number is mapped to an email alias `"{phone}@sipatokkong.local"` for
-  Supabase Auth. There is **no public sign-up** — the admin creates all accounts.
-- **Storage** uses three private buckets (`presensi`, `tugas-demo`, `dokumentasi`) with a
-  `{anak_id}/{yyyy}/{mm}/{uuid}.{ext}` path convention; access is gated by the child ID in the first path
-  segment.
-- **Notifications** are written server-side only, by database triggers (e.g. a new `tugas` notifies the parent;
-  new `feedback` notifies assigned volunteers; a volunteer reply notifies the parent).
-
----
-
-## Project Structure
-
-```
-app/src/main/java/com/antoniusindra/sipatokkong/
-├── MainActivity.kt
-├── SipatokkongApp.kt              # Application class
-├── core/
-│   ├── di/ServiceLocator.kt       # manual DI
-│   ├── auth/SessionManager.kt     # session state
-│   └── supabase/SupabaseModule.kt # Supabase client setup
-├── data/
-│   ├── model/                     # Profile, UserRole (mirrors Postgres enums)
-│   └── repository/                # AuthRepository, ProfileRepository
-└── ui/
-    ├── SipatokkongMain.kt         # root navigation
-    ├── auth/login/                # LoginScreen + LoginViewModel
-    ├── admin/                     # CreateAccountScreen + ViewModel
-    ├── home/                      # AdminHomeScreen
-    └── theme/                     # Color, Theme, Type
-
-supabase/migrations/
-└── 0001_initial_schema.sql        # schema + RLS + storage + triggers
-```
-
----
-
-## Getting Started
-
-### Prerequisites
-- **JDK 11+** — the IntelliJ IDEA bundled JBR works
-  (`/Applications/IntelliJ IDEA.app/Contents/jbr/Contents/Home` on macOS).
-- **Android SDK** with platform 36 and platform-tools.
-- A **Supabase project** (Auth + Postgres + Storage enabled).
-
-### 1. Configure secrets
-Create/edit `local.properties` in the project root (this file is git-ignored — **never commit it, and never put
-the `service_role` key here**):
-
-```properties
-sdk.dir=/path/to/your/android-sdk
-SUPABASE_URL=https://YOUR-PROJECT.supabase.co
-SUPABASE_ANON_KEY=your-anon-public-key
-```
-
-These are exposed to the app as `BuildConfig.SUPABASE_URL` / `BuildConfig.SUPABASE_ANON_KEY`.
-
-### 2. Apply the database schema
-Run [`supabase/migrations/0001_initial_schema.sql`](supabase/migrations/0001_initial_schema.sql) against your
-Supabase project (via the Supabase SQL editor or the Supabase CLI).
-
-### 3. Build & run
-```bash
-# build a debug APK
-./gradlew :app:assembleDebug
-
-# or install onto a connected device / running emulator
-./gradlew :app:installDebug
-```
-Then launch the app on an Android device (USB or wireless debugging) or an emulator (API 27+).
 
 ---
 
